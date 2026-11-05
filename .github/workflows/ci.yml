@@ -75,7 +75,7 @@ jobs:
         env:
           FLOCI_SERVICES: s3,dynamodb,sqs,sns,lambda,iam,ec2,rds,secretsmanager,eventbridge,cloudwatch,logs
         options: >-
-          --health-cmd "curl -sf http://localhost:4566/_floci/health"
+          --health-cmd "bash -c 'for p in /proc/[0-9]*/cmdline; do c=$(head -c 120 "$p" 2>/dev/null | tr '\0' ' '); case "$c" in *application*) exit 0;; esac; done; exit 1'"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 30

@@ -28,8 +28,10 @@ services:
       - floci-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
-      # Floci 2.x images no longer ship curl — probe over bash's /dev/tcp instead.
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost:4566 && printf 'GET /_floci/health HTTP/1.0\r\n\r\n' >&3 && grep -q '200 OK' <&3"]
+      # Floci 2.4.0+ images ship bash without /dev/tcp net-redirections and no
+      # curl/wget/nc — probe emulator process liveness instead of the endpoint
+      # (the dashboard backend and CI scripts poll /_floci/health themselves).
+      test: ["CMD-SHELL", "for p in /proc/[0-9]*/cmdline; do c=$$(head -c 120 \"$$p\" 2>/dev/null | tr '\\0' ' '); case \"$$c\" in *application*) exit 0;; esac; done; exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
