@@ -5,6 +5,23 @@ All notable changes to Floci Dash will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-11-05
+
+### Added
+- **26 brand-new service dashboards (P.1–P.26)** for Floci 2.1.0: Account (alternate contacts), Budgets (budgets/notifications/subscribers/actions), Cognito Identity Pools, Redshift Data (SQL console), Redshift Serverless, OAM, Identity Store, SageMaker, Bedrock Guardrails, Global Accelerator, Verified Permissions, Timestream InfluxDB, DataSync, DMS, DLM, Access Analyzer, Control Catalog, App Integrations, Inspector2, Security Hub, Detective, Macie2, CodeArtifact, Marketplace, BCM Pricing Calculator, SSO OIDC
+- **E.1–E.9 enhancement backlog closed** across all pre-existing services:
+  - SES v2 (export/import jobs, insights, dedicated IPs, tenants, receipt filters, rule-set clone/reorder), ECS (execute command console), EKS (addons/access entries/pod identity/logging), RDS (snapshots/stop-start/replicas/global clusters/event subscriptions), IAM (credential report, policy simulator, login profiles, SAML providers, last-accessed, instance profile tags), EC2 (volume modification, image copy/deregister, monitoring, snapshots tab + block public access, credit specs, egress-only IGWs, spot history), IoT (domain configurations, endpoint), Cognito (user pool domains, ExplicitAuthFlows, attribute verification)
+  - E.9 audit sweep: EventBridge connections, KMS key import/replication, Firehose encryption + destination update, Lambda account settings, Step Functions aliases + map runs, DynamoDB resource policies + S3 imports, Batch updates/cancel, Athena catalogs + tags, CloudTrail trail tags, SecretsManager replication + policy validation, ECR pull-through rules, RAM invitations, Neptune roles/tags/global clusters, CloudFormation stack-sets/termination protection/template summary, Backup vault security, GuardDuty members/org, APS namespaces, ControlTower controls, ACM certificate ops, CE Cost Anomaly Detection, Route53 VPC associations/limits/health checks, CloudWatch Logs log-management + Insights console, CloudWatch dashboards + metric streams, S3 advanced bucket configs, ConfigService governance, CloudFront advanced (realtime logs/FLE/streaming), Glue ETL families (crawlers/jobs/triggers/workflows/connections/classifiers), SSO Admin (permission sets, account assignments, trusted token issuers, access control attributes)
+
+### Fixed
+- Route53 DELETE record-set now sends the full TTL+ResourceRecords body (Floci 2.x validation)
+- Compose healthcheck rewritten to a bash /dev/tcp probe (Floci 2.x images drop curl)
+- Cognitoidentity router registration missed in the P.3 feature commit
+
+### Improved
+- Test suite grown from 13,523 to 16,888 tests across 466 files; coverage thresholds held at 99.9/99
+- Live integration suites unlocked for services previously guarded as post-2.1.0-tag
+
 ## [0.4.0] — 2026-09-12
 
 ### Added
