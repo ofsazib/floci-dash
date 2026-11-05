@@ -1,7 +1,7 @@
 // Auto-split from ServicePage.tsx. Shared import preamble is intentional;
 // unused imports are tree-shaken at build (noUnusedLocals is off).
 import { useParams, useNavigate } from "react-router-dom";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ContentLayout,
@@ -32,6 +32,11 @@ import StatusBadge from "../../components/StatusBadge";
 import { TableSkeleton } from "../../components/LoadingSkeleton";
 import ServiceDashboardLayout from "../../components/ServiceDashboardLayout";
 import EmptyState from "../../components/EmptyState";
+import TypedConfirmModal from "../../components/TypedConfirmModal";
+import { useBreadcrumbs, useServiceNavigation } from "../../components/ServiceNavigationContext";
+import ClustersView, { clusterMonitoring } from "./ecs/ClustersView";
+import CreateClusterView from "./ecs/CreateClusterView";
+import TaskDefinitionsView from "./ecs/TaskDefinitionsView";
 import {
   useDynamoDBTables,
   useDynamoDBCreateTable,
@@ -526,125 +531,55 @@ const CLUSTER_PG_FAMILY_OPTIONS: SelectProps.Option[] = [
   { label: "aurora-mysql8", value: "aurora-mysql8" },
 ];
 
+type ECSView = { name: "section" } | { name: "create-cluster" } | { name: "cluster"; cluster: any };
+
+const ECS_SECTIONS: [id: string, text: string][] = [
+  ["clusters", "Clusters"],
+  ["task-definitions", "Task definitions"],
+  ["capacity-providers", "Capacity providers"],
+  ["account-settings", "Account settings"],
+];
+const ECS_SECTION_TITLES: Record<string, string> = Object.fromEntries(ECS_SECTIONS);
+
+/** Amazon ECS, laid out like the AWS console: its own side navigation, cluster list, create page and cluster detail. */
 export function ECSDashboard() {
-  const { data, isLoading, isError, error } = useECSClusters();
-  const createCluster = useCreateECSCluster();
-  const deleteCluster = useDeleteECSCluster();
-  const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [clusterName, setClusterName] = useState("");
+  const [section, setSection] = useState("clusters");
+  const [view, setView] = useState<ECSView>({ name: "section" });
 
-  const clusters = data?.clusters || [];
+  const open = (s: string) => {
+    setSection(s);
+    setView({ name: "section" });
+  };
 
-  const clusterColumns = [
-    { id: "name", header: "Cluster Name", cell: (item: any) => item.clusterName || "—", isRowHeader: true },
-    { id: "status", header: "Status", cell: (item: any) => <StatusBadge status={item.status || "ACTIVE"} /> },
-    { id: "runningTasks", header: "Running Tasks", cell: (item: any) => item.runningTasksCount ?? 0 },
-    { id: "services", header: "Services", cell: (item: any) => item.activeServicesCount ?? 0 },
-    { id: "instances", header: "Container Instances", cell: (item: any) => item.registeredContainerInstancesCount ?? 0 },
-    {
-      id: "actions",
-      header: "",
-      cell: (item: any) => (
-        <SpaceBetween direction="horizontal" size="xs">
-          <Button variant="link" onClick={() => setSelectedCluster(item.clusterName)}>
-            View
-          </Button>
-          <DeleteButton
-            itemName={item.clusterName}
-            resourceType="cluster"
-            loading={deleteCluster.isPending}
-            onDelete={() => deleteCluster.mutateAsync(item.clusterArn)}
-          />
-        </SpaceBetween>
-      ),
-    },
-  ];
-
-  if (selectedCluster) {
-    return <ECSClusterDetail clusterName={selectedCluster} onBack={() => setSelectedCluster(null)} />;
-  }
-
-  const clustersTab = (
-    <>
-      <ResourceTable
-        resourceName="Cluster"
-        headerTitle="ECS Clusters"
-        headerCounter={data?.total}
-        items={clusters}
-        columns={clusterColumns}
-        loading={isLoading}
-        emptyMessage="No clusters found. Create one to get started."
-        filterEnabled
-        filterPlaceholder="Find clusters by name"
-        filterFunction={(item: any, searchText: string) =>
-          (item.clusterName || "").toLowerCase().includes(searchText.toLowerCase())
-        }
-        onCreate={() => setShowCreate(true)}
-      />
-
-      <Modal
-        visible={showCreate}
-        onDismiss={() => setShowCreate(false)}
-        header="Create cluster"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setShowCreate(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                loading={createCluster.isPending}
-                disabled={!clusterName.trim()}
-                onClick={() => {
-                  createCluster.mutate(
-                    { clusterName: clusterName.trim() },
-                    { onSuccess: () => { setShowCreate(false); setClusterName(""); } }
-                  );
-                }}
-              >
-                Create
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <Form>
-          {createCluster.isError && (
-            <Alert type="error" dismissible>
-              {(createCluster.error as Error)?.message || "Failed to create cluster"}
-            </Alert>
-          )}
-          <FormField label="Cluster name" description="Enter a name for your ECS cluster.">
-            <Input
-              value={clusterName}
-              onChange={({ detail }) => setClusterName(detail.value)}
-              placeholder="my-cluster"
-            />
-          </FormField>
-        </Form>
-      </Modal>
-    </>
+  const nav = useMemo(
+    () => ({
+      header: { text: "Amazon Elastic Container Service", href: "#clusters" },
+      items: ECS_SECTIONS.map(([id, text]) => ({ type: "link" as const, text, href: `#${id}` })),
+      activeHref: `#${section}`,
+      onFollow: (href: string) => open(href.slice(1)),
+    }),
+    [section],
   );
+  useServiceNavigation(nav);
 
-  if (isError) {
-    return (
-      <Alert type="error" header="Failed to load ECS clusters">
-        {(error as Error)?.message || "Unknown error"}
-      </Alert>
-    );
-  }
+  const crumbs = useMemo(() => {
+    // As in the console, crumbs start at the service (no console home).
+    const items = [
+      { text: "Amazon Elastic Container Service", href: "#clusters" },
+      { text: ECS_SECTION_TITLES[section], href: `#${section}` },
+    ];
+    if (view.name === "create-cluster") items.push({ text: "Create cluster", href: "#clusters" });
+    if (view.name === "cluster") items.push({ text: view.cluster.clusterName, href: "#clusters" });
+    return items;
+  }, [section, view]);
+  useBreadcrumbs(crumbs);
 
-  return (
-    <Tabs
-      tabs={[
-        { label: "Clusters", id: "clusters", content: clustersTab },
-        { label: "Capacity Providers", id: "capacity-providers", content: <ECSCapacityProvidersTab /> },
-        { label: "Account Settings", id: "account-settings", content: <ECSAccountSettingsTab /> },
-      ]}
-    />
-  );
+  if (view.name === "create-cluster") return <CreateClusterView onDone={() => open("clusters")} />;
+  if (view.name === "cluster") return <ECSClusterDetail cluster={view.cluster} onBack={() => open("clusters")} />;
+  if (section === "task-definitions") return <TaskDefinitionsView />;
+  if (section === "capacity-providers") return <ECSCapacityProvidersTab />;
+  if (section === "account-settings") return <ECSAccountSettingsTab />;
+  return <ClustersView onOpen={(cluster) => setView({ name: "cluster", cluster })} onCreate={() => setView({ name: "create-cluster" })} />;
 }
 
 // ────────────────────────────────────────────────────────
@@ -674,7 +609,7 @@ function ECSCapacityProvidersTab() {
     <>
       <ResourceTable
         resourceName="Capacity provider"
-        headerTitle="Capacity Providers"
+        headerTitle="Capacity providers"
         headerCounter={data?.total}
         items={providers.map((cp) => ({
           name: cp.name,
@@ -789,7 +724,7 @@ function ECSAccountSettingsTab() {
     <>
       <ResourceTable
         resourceName="Account Setting"
-        headerTitle="Account Settings"
+        headerTitle="Account settings"
         headerCounter={settingsQuery.data?.total}
         items={settings}
         columns={columns}
@@ -863,10 +798,14 @@ function ECSAccountSettingsTab() {
 }
 
 
-function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack: () => void }) {
+function ECSClusterDetail({ cluster: initial, onBack }: { cluster: any; onBack: () => void }) {
+  const clusterName: string = initial.clusterName;
+  // Keep the overview counts live: the list query refetches every 10s.
+  const cluster = useECSClusters().data?.clusters?.find((c: any) => c.clusterName === clusterName) ?? initial;
+  const deleteCluster = useDeleteECSCluster();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const servicesQuery = useECSServices(clusterName);
   const tasksQuery = useECSTasks(clusterName);
-  const taskDefsQuery = useECSTaskDefinitions();
   const taskDefFamilies = useECSTaskDefinitionFamilies();
   const createService = useCreateECSService();
   const deleteService = useDeleteECSService();
@@ -909,7 +848,7 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
 
   const tabs: TabsProps.Tab[] = [
     {
-      label: `Services (${servicesQuery.data?.total || 0})`,
+      label: "Services",
       id: "services",
       content: (
         <>
@@ -1071,7 +1010,7 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
       ),
     },
     {
-      label: `Tasks (${tasksQuery.data?.total || 0})`,
+      label: "Tasks",
       id: "tasks",
       content: (
         <>
@@ -1225,33 +1164,13 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
       ),
     },
     {
-      label: `Task Definitions (${taskDefsQuery.data?.total || 0})`,
-      id: "task-defs",
-      content: (
-        <ResourceTable
-          resourceName="Task Definition"
-          headerTitle="Task Definitions"
-          headerCounter={taskDefsQuery.data?.total}
-          items={(taskDefsQuery.data?.taskDefinitionArns || []).map((arn: string) => ({ arn }))}
-          columns={[
-            { id: "arn", header: "Task Definition ARN", cell: (item: any) => item.arn.split("/").pop() || item.arn, isRowHeader: true },
-          ]}
-          loading={taskDefsQuery.isLoading}
-          emptyMessage="No task definitions registered."
-          filterEnabled
-          filterPlaceholder="Find task definitions"
-          filterFunction={(item: any, s: string) => (item.arn || "").toLowerCase().includes(s.toLowerCase())}
-        />
-      ),
-    },
-    {
-      label: "Task Sets",
+      label: "Task sets",
       id: "task-sets",
       content: <ECSTaskSetsTab clusterName={clusterName} services={servicesQuery.data?.services || []} />,
     },
     {
-      label: `Container Instances (${containerInstancesQuery.data?.total || 0})`,
-      id: "container-instances",
+      label: "Infrastructure",
+      id: "infrastructure",
       content: (
         <>
           <ResourceTable
@@ -1476,17 +1395,67 @@ function ECSClusterDetail({ clusterName, onBack }: { clusterName: string; onBack
     ? (taskProtectionQuery.error as Error)?.message || "Failed to load protection"
     : null;
 
+  async function handleDeleteCluster() {
+    try {
+      await deleteCluster.mutateAsync(cluster.clusterArn);
+      showToast("success", `Cluster ${clusterName} has been deleted.`);
+      setConfirmDelete(false);
+      onBack();
+    } catch (e) {
+      showToast("error", (e as Error)?.message || "Failed to delete cluster");
+    }
+  }
+
+  const overview: [label: string, value: React.ReactNode][] = [
+    ["ARN", cluster.clusterArn || "—"],
+    ["Status", <StatusBadge status={cluster.status || "ACTIVE"} />],
+    ["CloudWatch monitoring", clusterMonitoring(cluster)],
+    ["Registered container instances", cluster.registeredContainerInstancesCount ?? 0],
+  ];
+
   return (
     <SpaceBetween size="l">
-      <Box variant="h2">{clusterName}</Box>
-      <ServiceDashboardLayout
-        tabs={tabs}
-        backButton={
-          <Button variant="link" iconName="arrow-left" onClick={onBack}>
-            Clusters
-          </Button>
-        }
-      />
+      <Header
+        variant="h1"
+        actions={<Button onClick={() => setConfirmDelete(true)}>Delete cluster</Button>}
+      >
+        {clusterName}
+      </Header>
+      <Container header={<Header variant="h2">Cluster overview</Header>}>
+        <ColumnLayout columns={4} variant="text-grid">
+          {overview.map(([label, value]) => (
+            <div key={label}>
+              <Box variant="awsui-key-label">{label}</Box>
+              <div className="fd-console-break">{value}</div>
+            </div>
+          ))}
+          <div>
+            <Box variant="awsui-key-label">Services</Box>
+            <div>Draining: {cluster.drainingServicesCount ?? 0}</div>
+            <div>Active: {cluster.activeServicesCount ?? 0}</div>
+          </div>
+          <div>
+            <Box variant="awsui-key-label">Tasks</Box>
+            <div>Pending: {cluster.pendingTasksCount ?? 0}</div>
+            <div>Running: {cluster.runningTasksCount ?? 0}</div>
+          </div>
+        </ColumnLayout>
+      </Container>
+      <Tabs tabs={tabs} />
+      {/* Mounted only while open: a hidden Cloudscape modal still renders its buttons. */}
+      {confirmDelete && (
+      <TypedConfirmModal
+        visible
+        header={`Delete ${clusterName}?`}
+        confirmValue={`delete ${clusterName}`}
+        confirmLabel="Delete"
+        loading={deleteCluster.isPending}
+        onConfirm={handleDeleteCluster}
+        onDismiss={() => setConfirmDelete(false)}
+      >
+        Deleting the cluster permanently removes it. Services and tasks must be deleted first.
+      </TypedConfirmModal>
+      )}
       <Modal
         visible={!!protectionTaskId}
         onDismiss={() => setProtectionTaskId(null)}

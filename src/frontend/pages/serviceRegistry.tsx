@@ -123,6 +123,9 @@ import IotDataDashboard from "./services/IotDataDashboard";
 
 import type { ComponentType } from "react";
 
+/** Dashboards that render their own page header (ContentLayout), so ServicePage must not add one. */
+export const SELF_HEADED_DASHBOARDS = new Set(["organizations", "swf", "ecs"]);
+
 export const SERVICE_DASHBOARDS: Record<string, ComponentType> = {
   "dynamodb": DynamoDBTables,
   "rds": RDSDashboard,

@@ -48,7 +48,7 @@ export interface OrgPolicy {
 export function useOrg() {
   return useQuery<{ organization: OrgOrganization | null }>({
     queryKey: ["aws", "org"],
-    queryFn: () => api("/aws/organizations/"),
+    queryFn: () => api("/aws/organizations"),
   });
 }
 
@@ -146,10 +146,10 @@ export function useOrgParents(childId: string | null) {
   });
 }
 
-export function useOrgChildren(parentId: string | null) {
-  return useQuery<{ children: any[] }>({
-    queryKey: ["aws", "org", "children", parentId],
-    queryFn: () => api(`/aws/organizations/children?parentId=${parentId}`),
+export function useOrgChildren(parentId: string | null, childType: "ACCOUNT" | "ORGANIZATIONAL_UNIT" = "ACCOUNT") {
+  return useQuery<{ children: { Id: string; Type: string }[] }>({
+    queryKey: ["aws", "org", "children", parentId, childType],
+    queryFn: () => api(`/aws/organizations/children?parentId=${parentId}&childType=${childType}`),
     enabled: !!parentId,
   });
 }
@@ -181,8 +181,8 @@ export function useCreateOrgAccount() {
       email: string;
       name?: string;
       iamUserAccessToBilling?: string;
-      parentId?: string;
       roleName?: string;
+      tags?: Record<string, string>;
     }) =>
       api("/aws/organizations/accounts", { method: "POST", body: JSON.stringify(params) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "org"] }),
@@ -292,6 +292,24 @@ export function useDetachOrgPolicy() {
   return useMutation({
     mutationFn: (params: { policyId: string; targetId: string }) =>
       api("/aws/organizations/policies/detach", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "org"] }),
+  });
+}
+
+export function useEnableOrgPolicyType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { policyType: string; rootId: string }) =>
+      api("/aws/organizations/policies/enable-type", { method: "POST", body: JSON.stringify(params) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "org"] }),
+  });
+}
+
+export function useDisableOrgPolicyType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { policyType: string; rootId: string }) =>
+      api("/aws/organizations/policies/disable-type", { method: "POST", body: JSON.stringify(params) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["aws", "org"] }),
   });
 }

@@ -197,6 +197,12 @@ router.post("/instances", async (c: Context) => {
       MinCount: body.minCount || 1,
       MaxCount: body.maxCount || 1,
       UserData: body.userData ? Buffer.from(body.userData).toString("base64") : undefined,
+      TagSpecifications: Array.isArray(body.tagSpecifications)
+        ? body.tagSpecifications.map((spec: any) => ({
+            ResourceType: spec.resourceType,
+            Tags: (spec.tags || []).map((t: any) => ({ Key: sanitizeName(t.key, 128), Value: sanitizeName(t.value ?? "", 256) })),
+          }))
+        : undefined,
     })
   );
   const instances = (result.Instances || []).map((i) => ({

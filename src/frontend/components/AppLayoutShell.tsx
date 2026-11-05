@@ -1,20 +1,29 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { AppLayout, SideNavigation, TopNavigation, Input, Button, Autosuggest, Modal, Box, SpaceBetween, StatusIndicator } from "@cloudscape-design/components";
+import { AppLayoutToolbar, SideNavigation, TopNavigation, Input, Button, Autosuggest, Modal, Box, SpaceBetween, StatusIndicator, Flashbar, BreadcrumbGroup } from "@cloudscape-design/components";
 import type { SideNavigationProps, AutosuggestProps } from "@cloudscape-design/components";
 import { useHealth, useActiveServices } from "../hooks/useSystem";
 import { useSettings } from "../stores/settings";
+import { getBrand } from "../lib/brand";
 import { useFavorites } from "../stores/favorites";
 import { useRecentlyVisited } from "../hooks/useRecentlyVisited";
 import { SERVICE_LABELS, CATEGORY_ORDER, SERVICE_CATEGORY_MAP } from "../types/services";
+import { useToastItems } from "./Toast";
+import { ShellProvider, useShell } from "./ServiceNavigationContext";
+import ServicesMenu from "./ServicesMenu";
+import FavoritesBar from "./FavoritesBar";
+
+const REPO_URL = "https://github.com/ofsazib/floci-dash";
+const README_URL = `${REPO_URL}#readme`;
 
 interface Props {
   children: React.ReactNode;
 }
 
-const FLOCI_LOGO_SVG = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#0073e6"/></linearGradient></defs><rect width="32" height="32" rx="7" fill="url(#g)"/><text x="16" y="23" font-size="20" font-weight="bold" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif">F</text></svg>'
-)}`;
+const brand = getBrand();
+// Floci's defaults (see the dashboard backend's AWS_REGION and Floci's fixed account).
+const FLOCI_REGION = "us-east-1";
+const FLOCI_ACCOUNT_ID = "000000000000";
 
 // Services with full management UI (dedicated pages)
 const IMPLEMENTED_SERVICES: Record<string, string> = {
@@ -56,6 +65,16 @@ function ActiveDot() {
 }
 
 export default function AppLayoutShell({ children }: Props) {
+  return (
+    <ShellProvider>
+      <Shell>{children}</Shell>
+    </ShellProvider>
+  );
+}
+
+function Shell({ children }: Props) {
+  const { serviceNav, breadcrumbs } = useShell();
+  const toastItems = useToastItems();
   const [navOpen, setNavOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 600);
   const mainRef = useRef<HTMLDivElement>(null);
@@ -69,9 +88,6 @@ export default function AppLayoutShell({ children }: Props) {
   const location = useLocation();
   const { data: health } = useHealth();
   const { data: active } = useActiveServices();
-  const isMac = navigator.platform.startsWith("Mac");
-  const shortcutLabel = isMac ? "Cmd+K" : "Ctrl+K";
-  const shortcutBadge = isMac ? "⌘K" : "Ctrl+K";
   const { darkMode, toggleDarkMode } = useSettings();
 
   useEffect(() => {
@@ -88,10 +104,10 @@ export default function AppLayoutShell({ children }: Props) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Cmd+K / Ctrl+K — focus the global service search
+  // Alt+S (as in the AWS console) or Cmd+K / Ctrl+K — focus the global service search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      if (((e.metaKey || e.ctrlKey) && e.key === "k") || (e.altKey && e.key.toLowerCase() === "s")) {
         e.preventDefault();
         // Focus the input inside the Autosuggest (the header search is always mounted)
         const input = searchRef.current!.querySelector("input")!;
@@ -362,13 +378,15 @@ export default function AppLayoutShell({ children }: Props) {
         <TopNavigation
           identity={{
             href: "/#/",
-            title: isMobile ? "Floci" : "Floci Dash",
-            logo: { src: FLOCI_LOGO_SVG, alt: "Floci" },
+            title: isMobile && brand.title ? brand.name : brand.title,
+            logo: { src: brand.logo, alt: brand.name },
           }}
           search={
-            <div ref={searchRef} className={isMobile ? "fd-hide-mobile" : ""} style={{ position: "relative", minWidth: isMobile ? 0 : 200, maxWidth: 300 }}>
+            <div className="fd-topnav-search">
+            <ServicesMenu serviceKeys={health?.services ? Object.keys(health.services) : []} />
+            <div ref={searchRef} className={isMobile ? "fd-hide-mobile" : ""} style={{ position: "relative", width: isMobile ? 0 : "min(640px, 45vw)" }}>
               <Autosuggest
-                placeholder={`Search services... (${shortcutLabel})`}
+                placeholder="Search"
                 ariaLabel="Search services"
                 value={globalSearch}
                 onChange={(e) => setGlobalSearch(e.detail.value)}
@@ -406,8 +424,9 @@ export default function AppLayoutShell({ children }: Props) {
                   opacity: 0.7,
                 }}
               >
-                {shortcutBadge}
+                [Alt+S]
               </kbd>
+            </div>
             </div>
           }
           utilities={[
@@ -420,89 +439,137 @@ export default function AppLayoutShell({ children }: Props) {
             },
             {
               type: "button",
-              text: darkMode ? "\u2600" : "\u263D",
-              ariaLabel: darkMode ? "Switch to light mode" : "Switch to dark mode",
-              onClick: toggleDarkMode,
+              iconName: "status-info",
+              ariaLabel: "Help",
+              href: README_URL,
+              // New tab without the external-link arrow, as the console's help icon.
+              target: "_blank",
+              rel: "noopener noreferrer",
+            },
+            {
+              type: "menu-dropdown",
+              iconName: "settings",
+              ariaLabel: "Settings",
+              title: "Settings",
+              items: [
+                { id: "settings", text: "Settings", href: "/#/settings" },
+                { id: "toggle-theme", text: darkMode ? "Switch to light mode" : "Switch to dark mode" },
+              ],
+              onItemClick: (e) => {
+                if (e.detail.id === "toggle-theme") toggleDarkMode();
+              },
+            },
+            {
+              type: "menu-dropdown",
+              text: FLOCI_REGION,
+              title: "Region",
+              description: "Set with AWS_REGION on the dashboard backend.",
+              items: [{ id: "region", text: FLOCI_REGION, disabled: true }],
+            },
+            {
+              type: "menu-dropdown",
+              text: "test",
+              title: "Floci account",
+              description: `Account ID: ${FLOCI_ACCOUNT_ID}`,
+              items: [{ id: "settings", text: "Settings", href: "/#/settings" }],
             },
           ]}
           i18nStrings={{ searchIconAriaLabel: "Search", overflowMenuTriggerText: "More" }}
         />
+        <FavoritesBar />
       </div>
-      <AppLayout
+      <AppLayoutToolbar
         content={
           <div ref={mainRef} id="main-content" data-testid="app-layout-content">
             {children}
           </div>
         }
+        notifications={toastItems.length > 0 ? <Flashbar items={toastItems} /> : undefined}
+        breadcrumbs={
+          breadcrumbs ? (
+            <BreadcrumbGroup
+              items={breadcrumbs}
+              ariaLabel="Breadcrumbs"
+              onFollow={(e) => {
+                e.preventDefault();
+                // "#section" crumbs point inside the current service page.
+                if (serviceNav && e.detail.href.startsWith("#")) serviceNav.onFollow(e.detail.href);
+                else navigate(e.detail.href.replace("/#", ""));
+              }}
+            />
+          ) : undefined
+        }
         navigationOpen={navOpen}
         onNavigationChange={(e) => setNavOpen(e.detail.open)}
         navigation={
-          <div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "10px 20px 6px",
-                fontSize: "12px",
-              }}
-            >
-              <span className={allHealthy ? "fd-dot-success" : "fd-dot-warning"} />
-              {running} / {total} services running
+          serviceNav ? (
+            <div>
+              <SideNavigation
+                header={serviceNav.header}
+                activeHref={serviceNav.activeHref}
+                items={serviceNav.items}
+                onFollow={(e) => {
+                  e.preventDefault();
+                  serviceNav.onFollow(e.detail.href);
+                }}
+              />
+              {serviceNav.footer}
             </div>
-            <div style={{ padding: "0 12px 8px", position: "relative" }}>
+          ) : (
+          <div>
+            <div className="fd-nav-header">
+              <a
+                href="/#/"
+                className="fd-nav-header-title"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/");
+                }}
+              >
+                {brand.name}
+              </a>
+            </div>
+            <div className="fd-nav-tools">
               <Input
-                placeholder={`Find services... (${shortcutLabel})`}
+                placeholder="Find services"
                 type="search"
                 value={navQuery}
                 onChange={(e) => setNavQuery(e.detail.value)}
                 clearAriaLabel="Clear search"
                 ariaLabel="Filter services by name"
               />
-              <kbd
-                style={{
-                  position: "absolute",
-                  right: "28px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  pointerEvents: "none",
-                  fontSize: "11px",
-                  fontFamily: "inherit",
-                  padding: "1px 5px",
-                  borderRadius: "4px",
-                  border: "1px solid var(--color-border-input, #5b5b5b)",
-                  backgroundColor: "var(--color-background-input-default, #1a1a1a)",
-                  color: "var(--color-text-input-placeholder, #888)",
-                  lineHeight: "1.4",
-                  opacity: 0.7,
-                }}
-              >
-                {shortcutBadge}
-              </kbd>
-            </div>
-            {!navQuery && (
-              <div style={{ padding: "0 12px 8px", textAlign: "right" }}>
-                <Button
-                  variant="inline-link"
-                  onClick={toggleAll}
-                >
-                  {navAllExpanded ? "Collapse all" : "Expand all"}
-                </Button>
+              <div className="fd-nav-status">
+                <span>
+                  <span className={allHealthy ? "fd-dot-success" : "fd-dot-warning"} />
+                  {running} / {total} services running
+                </span>
+                {!navQuery && (
+                  <Button variant="inline-link" onClick={toggleAll}>
+                    {navAllExpanded ? "Collapse all" : "Expand all"}
+                  </Button>
+                )}
               </div>
-            )}
+            </div>
             <SideNavigation
               key={navKey}
-              header={{ text: "Floci", href: "/#/" }}
               activeHref={currentHref}
               onFollow={handleFollow as any}
               items={navItems}
             />
           </div>
+          )
         }
-        toolsHide
         navigationWidth={260}
         headerSelector="#header"
+        footerSelector="#footer"
       />
+      <footer id="footer" className="fd-console-footer">
+        <a href={`${REPO_URL}/issues`} target="_blank" rel="noreferrer">Feedback</a>
+        <span className="fd-console-footer-right">
+          <span>© {new Date().getFullYear()}, Floci Dash. Not affiliated with Amazon Web Services.</span>
+          <a href={README_URL} target="_blank" rel="noreferrer">Documentation</a>
+        </span>
+      </footer>
       <Modal
         visible={showNotifications}
         onDismiss={() => setShowNotifications(false)}

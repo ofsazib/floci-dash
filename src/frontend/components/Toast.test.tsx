@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
-import { ToastProvider, useToast } from "./Toast";
+import { Flashbar } from "@cloudscape-design/components";
+import { ToastProvider, useToast, useToastItems } from "./Toast";
+
+// The app shell renders the messages; mirror that here.
+function Bar() {
+  return <Flashbar items={useToastItems()} />;
+}
 
 function Consumer() {
   const { showToast } = useToast();
@@ -17,6 +23,7 @@ describe("Toast", () => {
     render(
       <ToastProvider>
         <Consumer />
+        <Bar />
       </ToastProvider>,
     );
     fireEvent.click(screen.getByText("fire"));
@@ -32,6 +39,7 @@ describe("Toast", () => {
     render(
       <ToastProvider>
         <Consumer />
+        <Bar />
       </ToastProvider>,
     );
     fireEvent.click(screen.getByText("fire"));
@@ -50,6 +58,7 @@ describe("Toast", () => {
     const { container } = render(
       <ToastProvider>
         <Consumer />
+        <Bar />
       </ToastProvider>,
     );
     fireEvent.click(screen.getByText("fire"));
@@ -58,6 +67,14 @@ describe("Toast", () => {
     const dismiss = container.querySelector<HTMLButtonElement>('button[class*="dismiss-button"]');
     expect(dismiss).not.toBeNull();
     expect(() => fireEvent.click(dismiss!)).not.toThrow();
+  });
+
+  it("exposes no messages outside a provider", () => {
+    function Count() {
+      return <span>{useToastItems().length}</span>;
+    }
+    render(<Count />);
+    expect(screen.getByText("0")).toBeTruthy();
   });
 
   it("provides a no-op default when used outside a provider", () => {

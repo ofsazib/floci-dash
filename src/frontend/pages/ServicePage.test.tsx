@@ -1471,12 +1471,48 @@ describe("ServicePage — RGT", () => {
     expect(screen.queryByText("arn:aws:s3:::my-bucket")).toBeNull();
   });
 
-  it("navigates when the breadcrumb is clicked", async () => {
-    const user = userEvent.setup();
+  it("registers Dashboard › service breadcrumbs with the shell", async () => {
+    const { ShellProvider, useShell } = await import("../components/ServiceNavigationContext");
+    let seen: any = "unset";
+    function Probe() {
+      seen = useShell().breadcrumbs;
+      return null;
+    }
     mockParams.mockReturnValue({ service: "bogus" });
-    render(<ServicePage />, { wrapper: createWrapper() });
-    await waitFor(() => expect(screen.getByRole("link", { name: /Dashboard/i })).toBeTruthy());
-    await user.click(screen.getByRole("link", { name: /Dashboard/i }));
-    expect(mockNavigate).toHaveBeenCalledWith("/");
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <ShellProvider>
+          <ServicePage />
+          <Probe />
+        </ShellProvider>
+      </Wrapper>,
+    );
+    await waitFor(() =>
+      expect(seen).toEqual([
+        { text: "Dashboard", href: "/#/" },
+        { text: "bogus", href: "/#/services/bogus" },
+      ]),
+    );
+  });
+
+  it("registers no breadcrumbs without a service param", async () => {
+    const { ShellProvider, useShell } = await import("../components/ServiceNavigationContext");
+    let seen: any = "unset";
+    function Probe() {
+      seen = useShell().breadcrumbs;
+      return null;
+    }
+    mockParams.mockReturnValue({});
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <ShellProvider>
+          <ServicePage />
+          <Probe />
+        </ShellProvider>
+      </Wrapper>,
+    );
+    await waitFor(() => expect(seen).toBeNull());
   });
 });

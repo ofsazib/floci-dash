@@ -3,6 +3,9 @@ import ReactDOM from "react-dom/client";
 import "@cloudscape-design/global-styles/index.css";
 import "./styles/dashboard.css";
 import App from "./App";
+import { applyAwsConsoleTheme } from "./lib/awsConsoleTheme";
+
+applyAwsConsoleTheme();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

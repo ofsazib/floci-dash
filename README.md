@@ -42,16 +42,19 @@
 
 ## Features
 
-- **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console
+- **AWS Console look and feel** — Built with [Cloudscape Design System](https://cloudscape.design/), the same component library used by the real AWS Management Console, themed (`src/frontend/lib/awsConsoleTheme.ts`) with colors sampled from AWS console screenshots: squid-ink top bar, orange primary buttons, `#f2f3f3` page background, 2px corners
+- **Console-style shell** — **Services** menu in the top bar (recently visited, favorites, all services, categories), search with `Alt+S` (or `Ctrl/Cmd+K`), Help and Settings menus, a favorites bar under the top bar, breadcrumbs above the page, and full-width flash messages
+- **Service side navigation** — Services can replace the global sidebar with their own navigation, as inside an AWS console service (see AWS Organizations)
+- **AWS Organizations console** — AWS accounts page with the Root → OU → account tree (Hierarchy/List views, search, **Actions** menu: create/rename/delete OU, move/remove/close account, export CSV), management-account badge and created/joined dates; Add an AWS account page (name, email, IAM role name, tags); Policies page with every policy type, enable/disable and per-type policy lists; Settings with organization details and delete-by-typing-the-ID
 - **65 Floci services** — Full navigation, status, and resource management with backend routes covering every service Floci emulates, plus dashboard-only extras (STS, EC2 Messages, AppConfig Data)
 - **Deep resource management** — Browse, create, and delete resources for implemented services (S3, DynamoDB, EC2, RDS, SQS, SNS, EventBridge, CloudWatch Logs, CloudWatch Metrics, Lambda, IAM, Secrets Manager, CloudFormation, KMS, ECS, SSM, Route 53, API Gateway)
 - **EC2 web terminal** — Interactive bash shell inside running EC2 instances directly from the browser (xterm.js + Docker Engine API with PTY)
-- **Dark mode** — Toggle between light and dark themes (persisted to localStorage)
+- **Dark mode** — Light (console) theme by default; switch to dark from the Settings menu in the top bar (persisted to localStorage)
 - **Auto-detect Floci endpoint** — Automatically discovers Floci across Docker environments (Windows, macOS, Linux) by probing `host.docker.internal`, `172.17.0.1`, `127.0.0.1`, and `localhost`
 - **Configurable Floci endpoint** — Change the Floci URL at runtime from Settings (no restart needed), or use auto-detect to find it automatically
 - **Floci maintenance** — Reset or nuke the emulator state from Settings with a confirmation modal, plus a diagnostics viewer that dumps `/_floci/diagnose` into a modal
 - **AWS-aligned sidebar** — Service categories reorganized to match AWS Console navigation (Application Integration, Containers, Management & Governance, etc.)
-- **Favorites** — Star any service for quick access; favorites persist in localStorage and appear at the top of the sidebar
+- **Favorites** — Star any service for quick access; favorites persist in localStorage and appear in the favorites bar under the top bar and at the top of the sidebar
 - **Recently Visited** — Last 10 visited services shown in the sidebar for quick re-access
 - **Combined search** — Sidebar search shows all matching services in one flat list (both implemented and available)
 - **Loading skeletons** — Animated skeleton placeholders during data fetches (table rows, stat cards, detail views)
@@ -62,7 +65,7 @@
 - **Zero host dependencies** — Everything runs in Docker, no Node.js or AWS CLI needed locally
 - **Single container** — One Docker image for the entire dashboard (React SPA + Node.js API)
 - **Error boundaries** — React error boundary wrapping the entire app, catches rendering errors gracefully with a recovery message
-- **Toast notifications** — Global API error interceptor that surfaces network and server errors via non-intrusive toast notifications
+- **Flash notifications** — Global API error interceptor that surfaces network and server errors, shown as full-width flash messages above the page like the AWS console
 - **Content Security Policy** — Strict CSP headers applied in production (self-only scripts, inline styles allowed for Cloudscape, no inline event handlers)
 - **Input sanitization** — All user inputs sanitized on the backend (control character stripping, path traversal prevention, JSON validation, length limits)
 - **100% test coverage** — **11,013 tests across 281 files** with **100% statement/branch/function/line coverage** across every file with executable code (backend routes, frontend pages/components/hooks, and 295 integration tests against a live Floci instance)
@@ -298,7 +301,11 @@ Run the full suite with Floci up (`make up-bg`) to include the 295 integration t
 src/
   frontend/                React 19 SPA (Vite)
     components/            Shared UI components
-      AppLayoutShell.tsx   Main layout + navigation
+      AppLayoutShell.tsx   Main layout: console-style top bar, favorites bar, navigation, breadcrumbs, flash messages
+      ServicesMenu.tsx     Top-bar "Services" menu (recent, favorites, all, categories)
+      FavoritesBar.tsx     Favorites strip under the top bar
+      ServiceIcon.tsx      Service tile coloured by category
+      ServiceNavigationContext.tsx  Lets a page register its own side navigation and breadcrumbs
       ServiceGrid.tsx      Dashboard home service cards
       ResourceTable.tsx    Generic table with pagination
       CreateModal.tsx      Generic create resource modal
@@ -308,7 +315,7 @@ src/
       EmptyState.tsx       Empty state with icon, title, description, action
       LoadingSkeleton.tsx  Animated skeleton placeholders
       ErrorBoundary.tsx    React error boundary (catches render errors)
-      Toast.tsx            Toast notification component
+      Toast.tsx            Flash notifications (rendered by the shell)
       DynamoDBTableDetail.tsx  DynamoDB item browser
       DynamoDBAdvanced.tsx DynamoDB advanced features (GSIs, TTL, tags, PartiQL)
       S3BucketConfig.tsx   S3 bucket configuration (20 tabs)
@@ -327,6 +334,7 @@ src/
       CloudFormationPage.tsx  CloudFormation stacks, resources, events, templates, policy
       KMSPage.tsx           KMS keys, aliases, grants, crypto playground
       ServicePage.tsx      Dynamic service pages
+      services/organizations/  AWS Organizations console (accounts tree, add account, policies, settings)
       Settings.tsx         Dark mode, refresh interval
     hooks/                 TanStack Query hooks
       useS3.ts             S3 operations
@@ -355,6 +363,7 @@ src/
       useResourceCounts.ts Resource count summaries
     lib/                   Utilities
       client.ts            Fetch wrapper
+      awsConsoleTheme.ts   Cloudscape theme with AWS console colors
       utils.ts             Helpers
     stores/                Zustand stores
       settings.ts          UI settings
@@ -517,7 +526,7 @@ These services have full CRUD operations in both backend and frontend:
 | **MemoryDB** | Clusters (list, create, describe, delete), tags (list per resource) |
 | **S3 Vector Search** | Vector buckets (list, create, get, delete), indexes (list, create, get, delete with dimension/data type/distance metric), vectors (put with metadata, get by keys, delete, query with top-K/filter) |
 | **SWF** (Simple Workflow) | Domains (list, describe, register, deprecate, undeprecate), workflow types (list, describe, register, deprecate, undeprecate, delete), activity types (list, describe, register, deprecate, undeprecate, delete), executions (open/closed list, start, describe, terminate, signal, request cancel), execution history, tags (list, add, remove) |
-| **Organizations** | Describe org, roots, OUs (list/create/update/delete), accounts (list/create/close), policies (list/create/delete), policy attachments (attach/detach), effective policies, tags |
+| **Organizations** | Console-style pages: AWS accounts tree (root/OUs/accounts, Hierarchy/List, search, create/rename/delete OU, move/remove/close account, CSV export), add account (name, email, IAM role, tags), policy types (enable/disable) and policies (list/create/delete), settings (details, delete organization) |
 | **Lightsail** | Instances (list/describe/create/delete/start/stop/reboot, state, ports), disks (list/describe/create/attach/detach/delete), static IPs (allocate/attach/detach/release), key pairs (list/create/delete), tags |
 | **AmazonMQ** | Brokers (list/describe/create/delete/reboot), users (list/describe/create/delete) |
 | **Kinesis Analytics V2** | Applications (list/describe/create/update/delete, start/stop), snapshots (list/create/describe/delete), tags |

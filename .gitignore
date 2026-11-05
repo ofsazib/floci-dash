@@ -7,3 +7,6 @@ coverage/
 .DS_Store
 .commandcode/
 .freebuff/
+
+# Local rebranding assets (VITE_BRAND_LOGO) — never committed
+public/brand/

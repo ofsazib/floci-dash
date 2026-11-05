@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [react()],
   root: "src/frontend",
   publicDir: resolve(__dirname, "public"),
+  // Read .env / .env.local from the repo root (VITE_BRAND_* rebranding).
+  envDir: __dirname,
   build: {
     outDir: "../../dist/frontend",
     emptyOutDir: true,

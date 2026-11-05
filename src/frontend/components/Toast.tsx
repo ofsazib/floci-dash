@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import { Flashbar, type FlashbarProps } from "@cloudscape-design/components";
+import type { FlashbarProps } from "@cloudscape-design/components";
 
 interface ToastItem {
   id: string;
@@ -13,9 +13,15 @@ interface ToastContextValue {
 }
 
 const ToastContext = createContext<ToastContextValue>({ showToast: () => {} });
+const ToastItemsContext = createContext<FlashbarProps.MessageDefinition[]>([]);
 
 export function useToast() {
   return useContext(ToastContext);
+}
+
+/** Current messages, rendered by the app shell as a full-width Flashbar (AWS console style). */
+export function useToastItems() {
+  return useContext(ToastItemsContext);
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -43,10 +49,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   return (
     <ToastContext.Provider value={{ showToast }}>
-      {children}
-      <div style={{ position: "fixed", top: 56, right: 20, zIndex: 9999, maxWidth: 400 }}>
-        <Flashbar items={flashbarItems} />
-      </div>
+      <ToastItemsContext.Provider value={flashbarItems}>{children}</ToastItemsContext.Provider>
     </ToastContext.Provider>
   );
 }

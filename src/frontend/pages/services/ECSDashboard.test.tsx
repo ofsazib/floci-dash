@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { clickButton, createWrapper } from "../../../test/helpers";
 import React from "react";
@@ -178,7 +178,32 @@ vi.mock("../../hooks/useECS", () => ({
   useDiscoverECSPollEndpoint: () => ({ mutateAsync: mockDiscoverPollEndpoint, isPending: false }),
 }));
 
+// Capture the registered side navigation and breadcrumbs (the shell renders them in the app).
+const shell = vi.hoisted(() => ({ nav: null as any, crumbs: null as any }));
+vi.mock("../../components/ServiceNavigationContext", () => ({
+  useServiceNavigation: (nav: unknown) => {
+    shell.nav = nav;
+  },
+  useBreadcrumbs: (items: unknown) => {
+    shell.crumbs = items;
+  },
+}));
+
 import { ECSDashboard } from "./ECSDashboard";
+
+/** Open a section through the registered ECS side navigation. */
+async function goTo(name: RegExp) {
+  const link = shell.nav.items.find((l: any) => name.test(l.text));
+  if (!link) throw new Error(`No ECS nav link matching ${name}`);
+  act(() => shell.nav.onFollow(link.href));
+}
+
+/** Open the (first) cluster from the cluster list by its name link. */
+async function openCluster(user: { click: (el: Element) => Promise<void> }) {
+  const link = screen.getAllByRole("button").find((b) => /^[\w-]+-cluster$/.test(b.textContent?.trim() || ""));
+  if (!link) throw new Error("No cluster link");
+  await user.click(link);
+}
 
 const toastMock = vi.fn();
 vi.mock("../../components/Toast", () => ({
@@ -288,147 +313,133 @@ beforeEach(() => {
 
 // ─── Tests ──────────────────────────────────────────────
 
-describe("ECSDashboard — cluster list", () => {
-  it("shows empty state", () => {
-    render(<ECSDashboard />, { wrapper: createWrapper() });
-    expect(screen.getByText("No clusters found. Create one to get started.")).toBeTruthy();
+const myCluster = {
+  clusterName: "my-cluster",
+  status: "ACTIVE",
+  clusterArn: "arn:aws:ecs:::cluster/my-cluster",
+  activeServicesCount: 3,
+  drainingServicesCount: 1,
+  pendingTasksCount: 4,
+  runningTasksCount: 2,
+  registeredContainerInstancesCount: 5,
+};
+
+describe("ECSDashboard — console navigation", () => {
+  const crumbTexts = () => shell.crumbs.map((c: any) => c.text);
+  beforeEach(() => {
+    mockClusters.mockReturnValue({ data: { clusters: [myCluster], total: 1 }, isLoading: false, isError: false, error: null, refetch: vi.fn() });
   });
 
-  it("renders clusters list with data", () => {
-    mockClusters.mockReturnValue({
-      data: {
-        clusters: [
-          { clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster", runningTasksCount: 2, activeServicesCount: 3, registeredContainerInstancesCount: 1 },
-        ],
-        total: 1,
-      },
-      isLoading: false,
-    });
+  it("opens on Clusters with the ECS side navigation", () => {
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    expect(screen.getByText("my-cluster")).toBeTruthy();
-    expect(screen.getAllByText("2").length).toBeGreaterThan(0);
-    expect(screen.getByText("3")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /Clusters/ })).toBeTruthy();
+    expect(shell.nav.header.text).toBe("Amazon Elastic Container Service");
+    expect(shell.nav.items.map((i: any) => i.text)).toEqual(["Clusters", "Task definitions", "Capacity providers", "Account settings"]);
+    expect(shell.nav.activeHref).toBe("#clusters");
+    expect(crumbTexts()).toEqual(["Amazon Elastic Container Service", "Clusters"]);
   });
 
-  it("opens create cluster modal and submits", async () => {
+  it("shows task definitions from the side navigation", async () => {
+    mockTaskDefs.mockReturnValue({ data: { taskDefinitionArns: ["arn:aws:ecs:::task-definition/web:3"], total: 1 }, isLoading: false });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await goTo(/Task definitions/);
+    expect(screen.getByText("web:3")).toBeTruthy();
+    expect(shell.nav.activeHref).toBe("#task-definitions");
+    expect(crumbTexts()).toEqual(["Amazon Elastic Container Service", "Task definitions"]);
+    fireEvent.change(screen.getByPlaceholderText("Find task definitions"), { target: { value: "WEB" } });
+    expect(screen.getByText("web:3")).toBeTruthy();
+  });
+
+  it("shows task definitions that are not ARNs as-is", async () => {
+    mockTaskDefs.mockReturnValue({ data: { taskDefinitionArns: ["plain/"], total: 1 }, isLoading: false });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await goTo(/Task definitions/);
+    expect(screen.getByText("plain/")).toBeTruthy();
+  });
+
+  it("handles a missing task definitions payload", async () => {
+    mockTaskDefs.mockReturnValue({ data: undefined, isLoading: true });
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await goTo(/Task definitions/);
+    expect(screen.getByText("(0)")).toBeTruthy();
+  });
+
+  it("opens Create cluster and returns on Cancel", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
-    const input = screen.getByPlaceholderText("my-cluster");
-    await user.type(input, "new-cluster");
-    await clickButton(user, /Create/i, { last: true });
-    expect(mockCreateCluster).toHaveBeenCalledWith(
-      { clusterName: "new-cluster" },
-      expect.any(Object),
-    );
+    await user.click(screen.getByRole("button", { name: "Create cluster" }));
+    expect(screen.getByRole("heading", { name: "Create cluster" })).toBeTruthy();
+    expect(crumbTexts()).toEqual(["Amazon Elastic Container Service", "Clusters", "Create cluster"]);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByPlaceholderText("Search clusters")).toBeTruthy();
   });
 
-  it("deletes a cluster", async () => {
+  it("shows the cluster overview with live counts", async () => {
     const user = userEvent.setup();
-    mockClusters.mockReturnValue({
-      data: {
-        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
-        total: 1,
-      },
-      isLoading: false,
-    });
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    const deleteBtn = screen.getByRole("button", { name: /Delete my-cluster/i });
-    await user.click(deleteBtn);
-    await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
-    await clickButton(user, /^Delete$/i);
+    await openCluster(user);
+    expect(screen.getByRole("heading", { name: "my-cluster" })).toBeTruthy();
+    expect(crumbTexts()).toEqual(["Amazon Elastic Container Service", "Clusters", "my-cluster"]);
+    expect(screen.getByText("arn:aws:ecs:::cluster/my-cluster")).toBeTruthy();
+    expect(screen.getByText("Draining: 1")).toBeTruthy();
+    expect(screen.getByText("Pending: 4")).toBeTruthy();
+    expect(screen.getByText("Default")).toBeTruthy();
+    for (const tab of ["Services", "Tasks", "Task sets", "Infrastructure"]) expect(screen.getByRole("tab", { name: tab })).toBeTruthy();
+  });
+
+  it("falls back to the opened cluster and defaults when the list no longer has it", async () => {
+    const user = userEvent.setup();
+    const bare = { clusterName: "bare-cluster" };
+    mockClusters.mockReturnValue({ data: { clusters: [bare], total: 1 }, isLoading: false, isError: false, error: null, refetch: vi.fn() });
+    const { rerender } = render(<ECSDashboard />, { wrapper: createWrapper() });
+    await openCluster(user);
+    mockClusters.mockReturnValue({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() });
+    rerender(<ECSDashboard />);
+    expect(screen.getByRole("heading", { name: "bare-cluster" })).toBeTruthy();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.getByText("Running: 0")).toBeTruthy();
+    expect(screen.getByText("Active: 0")).toBeTruthy();
+  });
+
+  it("deletes a cluster after typing the confirmation", async () => {
+    const user = userEvent.setup();
+    mockDeleteCluster.mockResolvedValue({});
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await openCluster(user);
+    await user.click(screen.getByRole("button", { name: "Delete cluster" }));
+    const dialog = dialogOf("Delete my-cluster?");
+    await user.type(within(dialog).getByPlaceholderText("delete my-cluster"), "delete my-cluster");
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(mockDeleteCluster).toHaveBeenCalledWith("arn:aws:ecs:::cluster/my-cluster"));
+    expect(toastMock).toHaveBeenCalledWith("success", "Cluster my-cluster has been deleted.");
+    await waitFor(() => expect(screen.getByPlaceholderText("Search clusters")).toBeTruthy());
   });
 
-  it("shows loading state", () => {
-    mockClusters.mockReturnValue({
-      data: undefined,
-      isLoading: true,
-      isError: false,
-      error: null,
-    });
-    const { container } = render(<ECSDashboard />, { wrapper: createWrapper() });
-    expect(container.querySelectorAll("div").length).toBeGreaterThan(0);
+  it("reports cluster delete failures and cancels", async () => {
+    const user = userEvent.setup();
+    mockDeleteCluster.mockRejectedValueOnce(new Error("Has services")).mockRejectedValueOnce({});
+    render(<ECSDashboard />, { wrapper: createWrapper() });
+    await openCluster(user);
+    const attempt = async () => {
+      await user.click(screen.getByRole("button", { name: "Delete cluster" }));
+      const dialog = dialogOf("Delete my-cluster?");
+      await user.type(within(dialog).getByPlaceholderText("delete my-cluster"), "delete my-cluster");
+      await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    };
+    await attempt();
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Has services"));
+    await user.click(within(dialogOf("Delete my-cluster?")).getByRole("button", { name: "Cancel" }));
+    await attempt();
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith("error", "Failed to delete cluster"));
+    expect(screen.getByRole("heading", { name: "my-cluster" })).toBeTruthy();
   });
 
-  it("cancels create cluster modal", async () => {
+  it("returns to the cluster list from the side navigation", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
-    await clickButton(user, /Cancel/i);
-    await waitFor(() => {
-      expect(mockCreateCluster).not.toHaveBeenCalled();
-    });
-  });
-
-  it("filters clusters by name", async () => {
-    mockClusters.mockReturnValue({
-      data: {
-        clusters: [
-          { clusterName: "alpha-cluster", status: "ACTIVE", clusterArn: "arn:1" },
-          { clusterName: "beta-cluster", status: "ACTIVE", clusterArn: "arn:2" },
-        ],
-        total: 2,
-      },
-      isLoading: false,
-    });
-    const user = userEvent.setup();
-    render(<ECSDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => expect(screen.getByText("alpha-cluster")).toBeTruthy());
-    expect(screen.getByText("beta-cluster")).toBeTruthy();
-
-    const filterInput = screen.getByPlaceholderText("Find clusters by name");
-    await user.type(filterInput, "alpha");
-
-    await waitFor(() => {
-      expect(screen.queryByText("alpha-cluster")).toBeTruthy();
-      expect(screen.queryByText("beta-cluster")).toBeNull();
-    });
-  });
-
-  it("shows fallback values for missing cluster fields", () => {
-    mockClusters.mockReturnValue({
-      data: {
-        clusters: [
-          { clusterName: null, status: null, runningTasksCount: null, activeServicesCount: null, registeredContainerInstancesCount: null },
-        ],
-        total: 1,
-      },
-      isLoading: false,
-    });
-    render(<ECSDashboard />, { wrapper: createWrapper() });
-    // clusterName null → "—"
-    expect(screen.getByText("—")).toBeTruthy();
-  });
-
-  it("shows error alert when create cluster fails", async () => {
-    createClusterState.isError = true;
-    createClusterState.error = new Error("Cluster name taken");
-    const user = userEvent.setup();
-    render(<ECSDashboard />, { wrapper: createWrapper() });
-
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
-    expect(screen.getByText("Cluster name taken")).toBeTruthy();
-
-    createClusterState.isError = false;
-    createClusterState.error = null;
-  });
-
-  it("shows loading indicator on delete cluster button", () => {
-    deleteClusterState.isPending = true;
-    deleteClusterState.variables = "arn:aws:ecs:::cluster/my-cluster";
-    mockClusters.mockReturnValue({
-      data: {
-        clusters: [{ clusterName: "my-cluster", status: "ACTIVE", clusterArn: "arn:aws:ecs:::cluster/my-cluster" }],
-        total: 1,
-      },
-      isLoading: false,
-    });
-    render(<ECSDashboard />, { wrapper: createWrapper() });
-    expect(screen.getByText("my-cluster")).toBeTruthy();
+    await openCluster(user);
+    await goTo(/^Clusters$/);
+    expect(screen.getByPlaceholderText("Search clusters")).toBeTruthy();
   });
 });
 
@@ -456,18 +467,18 @@ describe("ECSDashboard — cluster detail", () => {
   it("navigates into cluster detail on View click", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByText("my-cluster")).toBeTruthy());
   });
 
   it("shows services, tasks, and task def tabs", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => {
       expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy();
       expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy();
-      expect(screen.getByRole("tab", { name: /task definitions/i })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: /task sets/i })).toBeTruthy();
     });
   });
 
@@ -678,10 +689,10 @@ describe("ECSDashboard — cluster detail", () => {
       isLoading: false,
     });
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => {
       expect(screen.getByText("my-svc")).toBeTruthy();
-      expect(screen.getByText("Services (1)")).toBeTruthy();
+      expect(screen.getByText("(1)")).toBeTruthy();
     });
   });
 
@@ -692,7 +703,7 @@ describe("ECSDashboard — cluster detail", () => {
       isLoading: false,
     });
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await clickButton(user, /Create/i);
     await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
@@ -703,7 +714,7 @@ describe("ECSDashboard — cluster detail", () => {
   it("opens run task modal from tasks tab", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText(/No running tasks/)).toBeTruthy());
@@ -722,26 +733,26 @@ describe("ECSDashboard — cluster detail", () => {
       isLoading: false,
     });
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
-    await user.click(screen.getByRole("tab", { name: /task definitions/i }));
+    await goTo(/Task definitions/i);
     await waitFor(() => expect(screen.getByText("my-task:1")).toBeTruthy());
   });
 
   it("goes back to cluster list via back button", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByText("my-cluster")).toBeTruthy());
-    await clickButton(user, /Clusters/i);
-    await waitFor(() => expect(screen.getByText("ECS Clusters")).toBeTruthy());
+    await goTo(/^Clusters$/);
+    await waitFor(() => expect(screen.getByPlaceholderText("Search clusters")).toBeTruthy());
   });
 
   it("shows loading state for services tab", async () => {
     mockServices.mockReturnValue({ data: undefined, isLoading: true });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => {
       expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy();
     });
@@ -749,14 +760,14 @@ describe("ECSDashboard — cluster detail", () => {
     const servicesTab = screen.getByRole("tab", { name: /services/i });
     await user.click(servicesTab);
     await waitFor(() => {
-      expect(screen.getByText("Services (0)")).toBeTruthy();
+      expect(screen.getByText("(0)")).toBeTruthy();
     });
   });
 
   it("shows empty state for tasks tab", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText(/No running tasks/)).toBeTruthy());
@@ -765,9 +776,9 @@ describe("ECSDashboard — cluster detail", () => {
   it("shows empty state for task defs tab", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
-    await user.click(screen.getByRole("tab", { name: /task definitions/i }));
+    await goTo(/Task definitions/i);
     await waitFor(() => expect(screen.getByText(/No task definitions registered/i)).toBeTruthy());
   });
 
@@ -778,9 +789,9 @@ describe("ECSDashboard — cluster detail", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
-    await user.click(screen.getByRole("tab", { name: /task definitions/i }));
+    await goTo(/Task definitions/i);
     await waitFor(() => expect(screen.getByText("alpha:1")).toBeTruthy());
     const filterInput = screen.getByPlaceholderText("Find task definitions");
     await user.type(filterInput, "alpha");
@@ -802,7 +813,7 @@ describe("ECSDashboard — cluster detail", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText("abc123")).toBeTruthy());
@@ -822,7 +833,7 @@ describe("ECSDashboard — cluster detail", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText("stop-me")).toBeTruthy());
@@ -846,7 +857,7 @@ describe("ECSDashboard — cluster detail", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText("stopped-1")).toBeTruthy());
@@ -866,7 +877,7 @@ describe("ECSDashboard — cluster detail", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByText("del-svc")).toBeTruthy());
     const deleteBtn = screen.getByRole("button", { name: /Delete del-svc/i });
     await user.click(deleteBtn);
@@ -891,7 +902,7 @@ describe("ECSDashboard — cluster detail", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => {
@@ -913,7 +924,7 @@ describe("ECSDashboard — cluster detail", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => {
       expect(screen.getByText("minimal-svc")).toBeTruthy();
       // taskDefinition null → "—"
@@ -926,7 +937,7 @@ describe("ECSDashboard — cluster detail", () => {
     createServiceState.error = new Error("Service limit reached");
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await clickButton(user, /Create/i);
     await waitFor(() => {
@@ -950,7 +961,7 @@ describe("ECSDashboard — cluster detail", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => {
       expect(screen.getByText("my-svc")).toBeTruthy();
     });
@@ -961,7 +972,7 @@ describe("ECSDashboard — cluster detail", () => {
     runTaskState.error = new Error("Invalid task definition");
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText(/No running tasks/)).toBeTruthy());
@@ -976,7 +987,7 @@ describe("ECSDashboard — cluster detail", () => {
   it("cancels run task modal", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await clickButton(user, /Run/i);
@@ -1000,7 +1011,7 @@ describe("ECSDashboard — cluster detail", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByText("alpha-svc")).toBeTruthy());
     expect(screen.getByText("beta-svc")).toBeTruthy();
     const filterInput = screen.getByPlaceholderText("Find services");
@@ -1018,7 +1029,7 @@ describe("ECSDashboard — Account Settings", () => {
   it("shows account settings tab with empty state", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await waitFor(() => expect(screen.getByText("No account settings configured.")).toBeTruthy());
   });
 
@@ -1029,14 +1040,14 @@ describe("ECSDashboard — Account Settings", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await waitFor(() => expect(screen.getAllByText("containerInsights").length).toBeGreaterThan(0));
   });
 
   it("opens put setting modal and submits", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await clickButton(user, /Create Account Setting/i);
     await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
     await clickButton(user, /Save/i);
@@ -1053,7 +1064,7 @@ describe("ECSDashboard — Account Settings", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await waitFor(() => expect(screen.getAllByText("containerInsights").length).toBeGreaterThan(0));
     await clickButton(user, /Delete/i);
     // DeleteButton may require confirmation
@@ -1065,7 +1076,7 @@ describe("ECSDashboard — Account Settings", () => {
   it("puts account setting with isDefault checked", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await clickButton(user, /Create Account Setting/i);
     await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
     // Check the "Apply as account default" checkbox
@@ -1084,10 +1095,10 @@ describe("ECSDashboard — Account Settings", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await waitFor(() => {
       // Loading renders skeleton; "Account Settings" appears in tab label and header
-      expect(screen.getAllByText("Account Settings").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getAllByText("Account settings").length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -1099,7 +1110,7 @@ describe("ECSDashboard — Account Settings", () => {
     mockDeleteAccountSetting.mockResolvedValue({});
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await waitFor(() => expect(screen.getByText("serviceLongArnFormat")).toBeTruthy());
     await user.click(screen.getByRole("button", { name: /Delete serviceLongArnFormat/i }));
     await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
@@ -1130,7 +1141,7 @@ describe("ECSDashboard — Task Sets", () => {
 
   async function openTaskSetsTab(user: ReturnType<typeof userEvent.setup>) {
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /task sets/i }));
   }
@@ -1344,7 +1355,7 @@ describe("ECSDashboard — error states", () => {
       runTaskState.error = new Error("Task definition not found");
       const user = userEvent.setup();
       render(<ECSDashboard />, { wrapper: createWrapper() });
-      await clickButton(user, /View/i);
+      await openCluster(user);
       await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
       await user.click(screen.getByRole("tab", { name: /tasks/i }));
       await clickButton(user, /Create task/i);
@@ -1359,7 +1370,7 @@ describe("ECSDashboard — error states", () => {
       createServiceState.error = new Error("Service name already exists");
       const user = userEvent.setup();
       render(<ECSDashboard />, { wrapper: createWrapper() });
-      await clickButton(user, /View/i);
+      await openCluster(user);
       await waitFor(() => expect(screen.getByText("my-cluster")).toBeTruthy());
       const createBtns = screen.getAllByRole("button", { name: /Create/i });
       await user.click(createBtns[0]);
@@ -1374,14 +1385,6 @@ describe("ECSDashboard — error states", () => {
 // ─── Modal disabled buttons ─────────────────────────────────
 
 describe("ECSDashboard — modal disabled buttons", () => {
-  it("create cluster button is disabled when name empty", async () => {
-    const user = userEvent.setup();
-    render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
-    const createBtns = screen.getAllByRole("button", { name: /^Create$/i });
-    expect(createBtns[createBtns.length - 1]).toBeDisabled();
-  });
 
   describe("detail-level disabled buttons", () => {
     beforeEach(() => {
@@ -1404,7 +1407,7 @@ describe("ECSDashboard — modal disabled buttons", () => {
     it("run task button is disabled when task def input empty", async () => {
       const user = userEvent.setup();
       render(<ECSDashboard />, { wrapper: createWrapper() });
-      await clickButton(user, /View/i);
+      await openCluster(user);
       await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
       await user.click(screen.getByRole("tab", { name: /tasks/i }));
       await clickButton(user, /Create task/i);
@@ -1448,7 +1451,7 @@ describe("ECSDashboard — services filter", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByText("web-service")).toBeTruthy());
     expect(screen.getByText("worker-service")).toBeTruthy();
     const filterInput = screen.getByPlaceholderText("Find services");
@@ -1464,7 +1467,7 @@ describe("ECSDashboard — services filter", () => {
   it("create service button disabled when task definition not selected", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await clickButton(user, /Create/i);
     await waitFor(() => {
@@ -1478,7 +1481,7 @@ describe("ECSDashboard — services filter", () => {
   it("create service button disabled when name is empty", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await clickButton(user, /Create/i);
     await waitFor(() => {
@@ -1503,7 +1506,7 @@ describe("ECSDashboard — account settings toast errors", () => {
     mockDeleteAccountSetting.mockRejectedValue(new Error("Delete failed"));
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await waitFor(() => expect(screen.getAllByText("containerInsights").length).toBeGreaterThan(0));
     await user.click(screen.getByRole("button", { name: /Delete containerInsights/i }));
     await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
@@ -1519,7 +1522,7 @@ describe("ECSDashboard — account settings toast errors", () => {
     mockDeleteAccountSetting.mockRejectedValue(new Error(""));
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await waitFor(() => expect(screen.getAllByText("containerInsights").length).toBeGreaterThan(0));
     await user.click(screen.getByRole("button", { name: /Delete containerInsights/i }));
     await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
@@ -1531,7 +1534,7 @@ describe("ECSDashboard — account settings toast errors", () => {
     mockPutAccountSetting.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("Put failed")));
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await clickButton(user, /Create Account Setting/i);
     await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
     await clickButton(user, /Save/i);
@@ -1542,7 +1545,7 @@ describe("ECSDashboard — account settings toast errors", () => {
     mockPutAccountSetting.mockImplementation((_body: any, opts: any) => opts?.onError?.(new Error("")));
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await clickButton(user, /Create Account Setting/i);
     await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
     await clickButton(user, /Save/i);
@@ -1578,7 +1581,7 @@ describe("ECSDashboard — task set toast errors", () => {
 
   async function openWithService(user: ReturnType<typeof userEvent.setup>) {
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /task sets/i }));
     await user.click(screen.getByText("Choose a service"));
@@ -1648,15 +1651,6 @@ describe("ECSDashboard — task set toast errors", () => {
 // ─── Fallback error alerts ────────────────────────────────
 
 describe("ECSDashboard — fallback error alerts", () => {
-  it("shows fallback create cluster error message", async () => {
-    createClusterState.isError = true;
-    createClusterState.error = new Error("");
-    const user = userEvent.setup();
-    render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
-    expect(screen.getByText("Failed to create cluster")).toBeTruthy();
-  });
 
   it("shows fallback cluster list error message", () => {
     mockClusters.mockReturnValue({
@@ -1680,7 +1674,7 @@ describe("ECSDashboard — fallback error alerts", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await clickButton(user, /Create/i);
     await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
@@ -1698,7 +1692,7 @@ describe("ECSDashboard — fallback error alerts", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await clickButton(user, /Run/i);
@@ -1710,26 +1704,6 @@ describe("ECSDashboard — fallback error alerts", () => {
 // ─── Sparse data fallbacks ────────────────────────────────
 
 describe("ECSDashboard — sparse data fallbacks", () => {
-  it("filters clusters without crashing when a cluster has no name", async () => {
-    mockClusters.mockReturnValue({
-      data: {
-        clusters: [
-          { clusterName: "alpha-cluster", status: "ACTIVE", clusterArn: "arn:1" },
-          { clusterName: null, status: "ACTIVE", clusterArn: "arn:2" },
-        ],
-        total: 2,
-      },
-      isLoading: false,
-      isError: false,
-      error: null,
-    });
-    const user = userEvent.setup();
-    render(<ECSDashboard />, { wrapper: createWrapper() });
-    await waitFor(() => expect(screen.getByText("alpha-cluster")).toBeTruthy());
-    const filterInput = screen.getByPlaceholderText("Find clusters by name");
-    await user.type(filterInput, "alpha");
-    await waitFor(() => expect(screen.getByText("alpha-cluster")).toBeTruthy());
-  });
 
   it("shows dashes for account setting missing name and value", async () => {
     mockAccountSettings.mockReturnValue({
@@ -1738,7 +1712,7 @@ describe("ECSDashboard — sparse data fallbacks", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await waitFor(() => {
       expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
     });
@@ -1757,7 +1731,7 @@ describe("ECSDashboard — sparse data fallbacks", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByText("svc-no-status")).toBeTruthy());
     // StatusBadge maps unknown statuses to "Connected"
     expect(screen.getAllByText("Connected").length).toBeGreaterThanOrEqual(1);
@@ -1782,7 +1756,7 @@ describe("ECSDashboard — sparse data fallbacks", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByText("alpha-svc")).toBeTruthy());
     const filterInput = screen.getByPlaceholderText("Find services");
     await user.type(filterInput, "alpha");
@@ -1799,7 +1773,7 @@ describe("ECSDashboard — sparse data fallbacks", () => {
     mockTasks.mockReturnValue({ data: {}, isLoading: false });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText(/No running tasks/)).toBeTruthy());
@@ -1818,7 +1792,7 @@ describe("ECSDashboard — sparse data fallbacks", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     // StatusBadge maps unknown statuses to "Connected"
@@ -1836,9 +1810,9 @@ describe("ECSDashboard — sparse data fallbacks", () => {
     mockTaskDefs.mockReturnValue({ data: {}, isLoading: false });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
-    await user.click(screen.getByRole("tab", { name: /task definitions/i }));
+    await goTo(/Task definitions/i);
     await waitFor(() => expect(screen.getByText(/No task definitions registered/i)).toBeTruthy());
   });
 
@@ -1855,9 +1829,9 @@ describe("ECSDashboard — sparse data fallbacks", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
-    await user.click(screen.getByRole("tab", { name: /task definitions/i }));
+    await goTo(/Task definitions/i);
     await waitFor(() => expect(screen.getByText("plain-arn")).toBeTruthy());
   });
 
@@ -1874,9 +1848,9 @@ describe("ECSDashboard — sparse data fallbacks", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
-    await user.click(screen.getByRole("tab", { name: /task definitions/i }));
+    await goTo(/Task definitions/i);
     await waitFor(() => expect(screen.getByText("alpha:1")).toBeTruthy());
     const filterInput = screen.getByPlaceholderText("Find task definitions");
     await user.type(filterInput, "alpha");
@@ -1907,7 +1881,7 @@ describe("ECSDashboard — service form interactions", () => {
 
   async function openServiceModal(user: ReturnType<typeof userEvent.setup>) {
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await clickButton(user, /Create/i);
     await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
@@ -1976,7 +1950,7 @@ describe("ECSDashboard — remaining branch targets", () => {
     mockTaskDefFamilies.mockReturnValue({ data: { families: ["my-family"] }, isLoading: false });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await clickButton(user, /Create/i);
     await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
@@ -2002,7 +1976,7 @@ describe("ECSDashboard — remaining branch targets", () => {
     mockTaskSets.mockReturnValue({ data: {}, isLoading: false });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /task sets/i }));
     await user.click(screen.getByText("Choose a service"));
@@ -2020,7 +1994,7 @@ describe("ECSDashboard — remaining branch targets", () => {
     mockTaskDefFamilies.mockReturnValue({ data: {}, isLoading: false });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await clickButton(user, /Create/i);
     await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
@@ -2038,7 +2012,7 @@ describe("ECSDashboard — remaining branch targets", () => {
     mockTaskDefFamilies.mockReturnValue({ data: { families: ["my-family"] }, isLoading: false });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy());
     await clickButton(user, /Create/i);
     await waitFor(() => expect(screen.getAllByText("Create Service").length).toBeGreaterThan(0));
@@ -2065,32 +2039,12 @@ describe("ECSDashboard — remaining branch targets", () => {
 // ─── Modal dismiss & success paths ──────────────────────
 
 describe("ECSDashboard — modal dismiss & success paths", () => {
-  it("dismisses create cluster modal with Escape", async () => {
-    const user = userEvent.setup();
-    render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
-    dismissModalWithEscape();
-    await waitFor(() => expectModalHidden("Create cluster"));
-  });
 
-  it("closes create cluster modal when creation succeeds", async () => {
-    mockCreateCluster.mockImplementation((_body: any, opts: any) =>
-      opts?.onSuccess?.(),
-    );
-    const user = userEvent.setup();
-    render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /Create/i);
-    await waitFor(() => expect(screen.getByText("Create cluster")).toBeTruthy());
-    await user.type(screen.getByPlaceholderText("my-cluster"), "new-cluster");
-    await clickButton(user, /Create/i, { last: true });
-    await waitFor(() => expectModalHidden("Create cluster"));
-  });
 
   it("dismisses put account setting modal with Escape and Cancel", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await clickButton(user, /Create Account Setting/i);
     await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
     dismissModalWithEscape();
@@ -2112,7 +2066,7 @@ describe("ECSDashboard — modal dismiss & success paths", () => {
     );
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /account settings/i }));
+    await goTo(/Account settings/i);
     await clickButton(user, /Create Account Setting/i);
     await waitFor(() => expect(screen.getByText("Put account setting")).toBeTruthy());
     // Change the setting name select
@@ -2149,7 +2103,7 @@ describe("ECSDashboard — modal dismiss & success paths", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy(),
     );
@@ -2187,7 +2141,7 @@ describe("ECSDashboard — modal dismiss & success paths", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy(),
     );
@@ -2226,7 +2180,7 @@ describe("ECSDashboard — modal dismiss & success paths", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() =>
       expect(screen.getByRole("tab", { name: /services/i })).toBeTruthy(),
     );
@@ -2291,9 +2245,9 @@ describe("ECSDashboard — G.89 container instances + task protection", () => {
 
   async function openCluster(user: ReturnType<typeof userEvent.setup>) {
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
-    await waitFor(() => expect(screen.getByRole("tab", { name: /container instances/i })).toBeTruthy());
-    await user.click(screen.getByRole("tab", { name: /container instances/i }));
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Infrastructure/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Infrastructure/i }));
   }
 
   it("lists container instances with status and counts", async () => {
@@ -2492,7 +2446,7 @@ describe("ECSDashboard — G.89 container instances + task protection", () => {
       isLoading: false,
     });
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText("task-1")).toBeTruthy());
@@ -2537,7 +2491,7 @@ describe("ECSDashboard — G.89 container instances + task protection", () => {
       isLoading: false,
     });
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText("task-2")).toBeTruthy());
@@ -2577,7 +2531,7 @@ describe("ECSDashboard — G.89 container instances + task protection", () => {
       isLoading: false,
     });
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText("task-3")).toBeTruthy());
@@ -2606,9 +2560,9 @@ describe("ECSDashboard — G.89 coverage edge cases", () => {
 
   async function openInstances(user: ReturnType<typeof userEvent.setup>) {
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
-    await waitFor(() => expect(screen.getByRole("tab", { name: /container instances/i })).toBeTruthy());
-    await user.click(screen.getByRole("tab", { name: /container instances/i }));
+    await openCluster(user);
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Infrastructure/i })).toBeTruthy());
+    await user.click(screen.getByRole("tab", { name: /Infrastructure/i }));
   }
 
   it("renders sparse container instances with fallbacks", async () => {
@@ -2761,7 +2715,7 @@ describe("ECSDashboard — G.89 coverage edge cases", () => {
     });
     mockUpdateTaskProtection.mockImplementation((_body: any, opts: any) => opts?.onError?.("save boom"));
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await clickButton(user, /View/i);
+    await openCluster(user);
     await waitFor(() => expect(screen.getByRole("tab", { name: /tasks/i })).toBeTruthy());
     await user.click(screen.getByRole("tab", { name: /tasks/i }));
     await waitFor(() => expect(screen.getByText("task-4")).toBeTruthy());
@@ -2780,7 +2734,7 @@ describe("ECSDashboard — capacity providers tab", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     expect(await screen.findByText("cp-1")).toBeTruthy();
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
   });
@@ -2788,7 +2742,7 @@ describe("ECSDashboard — capacity providers tab", () => {
   it("shows the empty message", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     expect(await screen.findByText("No capacity providers")).toBeTruthy();
   });
 
@@ -2796,7 +2750,7 @@ describe("ECSDashboard — capacity providers tab", () => {
     mockCreateCapacityProvider.mockImplementation((_b: any, opts: any) => opts?.onSuccess?.());
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     const createBtn = await screen.findByRole("button", { name: /Create capacity provider/i });
     await user.click(createBtn);
     const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
@@ -2817,7 +2771,7 @@ describe("ECSDashboard — capacity providers tab", () => {
     mockCapacityProviders.mockReturnValue({ data: undefined, isLoading: false });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     expect(await screen.findByText("No capacity providers")).toBeTruthy();
   });
 
@@ -2826,7 +2780,7 @@ describe("ECSDashboard — capacity providers tab", () => {
     createCpState.error = null;
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     await user.click(await screen.findByRole("button", { name: /Create capacity provider/i }));
     expect(await screen.findByText("Failed to create capacity provider")).toBeTruthy();
   });
@@ -2840,7 +2794,7 @@ describe("ECSDashboard — capacity providers tab", () => {
     deleteCpState.variables = "cp-1";
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     const btn = await screen.findByRole("button", { name: /Delete cp-1/i });
     expect(btn.className).toMatch(/disabled/);
   });
@@ -2850,7 +2804,7 @@ describe("ECSDashboard — capacity providers tab", () => {
     createCpState.error = new Error("cp failed");
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     await user.click(await screen.findByRole("button", { name: /Create capacity provider/i }));
     expect(await screen.findByText("cp failed")).toBeTruthy();
   });
@@ -2858,7 +2812,7 @@ describe("ECSDashboard — capacity providers tab", () => {
   it("covers create-modal cancel and Escape-dismiss arms", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     await user.click(await screen.findByRole("button", { name: /Create capacity provider/i }));
     const dialog = screen.getAllByRole("dialog").find((d) => !d.className.includes("hidden"))!;
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -2872,7 +2826,7 @@ describe("ECSDashboard — capacity providers tab", () => {
   it("keeps Create disabled until both fields are filled", async () => {
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     await user.click(await screen.findByRole("button", { name: /Create capacity provider/i }));
     const submit = screen.getAllByRole("button", { name: /^Create$/ }).at(-1)!;
     expect(submit.hasAttribute("disabled")).toBe(true);
@@ -2886,7 +2840,7 @@ describe("ECSDashboard — capacity providers tab", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     await user.click(await screen.findByRole("button", { name: /Delete cp-1/i }));
     await waitFor(() => expect(screen.getByText(/Are you sure/)).toBeTruthy());
     await clickButton(user, /^Delete$/i);
@@ -2900,7 +2854,7 @@ describe("ECSDashboard — capacity providers tab", () => {
     });
     const user = userEvent.setup();
     render(<ECSDashboard />, { wrapper: createWrapper() });
-    await user.click(screen.getByRole("tab", { name: /Capacity Providers/i }));
+    await goTo(/Capacity providers/i);
     expect(await screen.findByText("env=prod")).toBeTruthy();
     expect(screen.getByText("ACTIVE")).toBeTruthy();
   });

@@ -1699,6 +1699,28 @@ describe("EC2 Routes", () => {
       expect(body.instances[0].blockDevices).toEqual([]);
     });
 
+    it("POST /instances — passes tag specifications (Name tag) through", async () => {
+      mockSend.mockResolvedValueOnce({ Instances: [{ InstanceId: "i-tag", State: { Name: "pending" } }] });
+      await post("/instances", {
+        imageId: "ami-1",
+        tagSpecifications: [
+          { resourceType: "instance", tags: [{ key: "Name", value: "web 1" }, { key: "empty" }] },
+          { resourceType: "volume" },
+        ],
+      });
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.TagSpecifications).toEqual([
+        { ResourceType: "instance", Tags: [{ Key: "Name", Value: "web 1" }, { Key: "empty", Value: "" }] },
+        { ResourceType: "volume", Tags: [] },
+      ]);
+    });
+
+    it("POST /instances — omits tag specifications when absent", async () => {
+      mockSend.mockResolvedValueOnce({ Instances: [] });
+      await post("/instances", { imageId: "ami-1" });
+      expect(mockSend.mock.calls[0][0].TagSpecifications).toBeUndefined();
+    });
+
     it("POST /instances — sparse response without Instances", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/instances", { imageId: "ami-001" });

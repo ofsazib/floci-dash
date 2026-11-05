@@ -205,6 +205,14 @@ describe("Organizations routes", () => {
       const res = await get("/children?parentId=r-1");
       expect(res.status).toBe(200);
       expect((await res.json()).children[0].Id).toBe("ou-1");
+      expect(mockSend.mock.calls.at(-1)![0].ChildType).toBe("ACCOUNT");
+    });
+
+    it("GET /children lists OU children when childType=ORGANIZATIONAL_UNIT", async () => {
+      mockSend.mockResolvedValueOnce({ Children: [] });
+      const res = await get("/children?parentId=r-1&childType=ORGANIZATIONAL_UNIT");
+      expect(res.status).toBe(200);
+      expect(mockSend.mock.calls.at(-1)![0].ChildType).toBe("ORGANIZATIONAL_UNIT");
     });
 
     it("GET /children returns 400 without parentId", async () => {
@@ -573,10 +581,21 @@ describe("Organizations routes", () => {
       expect((await res.json()).accounts).toEqual([]);
     });
 
-    it("POST /accounts with parentId adds ParentId tag", async () => {
+    it("POST /accounts ignores parentId instead of inventing a ParentId tag", async () => {
       mockSend.mockResolvedValueOnce({ CreateAccountStatus: { Id: "ca-1" } });
       const res = await post("/accounts", { email: "a@b.com", parentId: "r-1" });
       expect(res.status).toBe(200);
+      expect(mockSend.mock.calls.at(-1)![0].Tags).toBeUndefined();
+    });
+
+    it("POST /accounts passes user tags and the role name", async () => {
+      mockSend.mockResolvedValueOnce({ CreateAccountStatus: { Id: "ca-2" } });
+      const res = await post("/accounts", { email: "a@b.com", name: "Dev", roleName: "Admin", tags: { env: "dev" } });
+      expect(res.status).toBe(200);
+      const cmd = mockSend.mock.calls.at(-1)![0];
+      expect(cmd.Tags).toEqual([{ Key: "env", Value: "dev" }]);
+      expect(cmd.RoleName).toBe("Admin");
+      expect(cmd.AccountName).toBe("Dev");
     });
 
     it("GET /accounts/create-status uses [] when CreateAccountStatuses undefined", async () => {

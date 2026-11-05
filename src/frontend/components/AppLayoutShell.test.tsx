@@ -21,6 +21,15 @@ vi.mock("../stores/favorites", () => ({
   useFavorites: { getState: () => favState },
 }));
 
+// Top-bar pieces with their own test files.
+vi.mock("./ServicesMenu", () => ({
+  default: ({ serviceKeys }: { serviceKeys: string[] }) =>
+    React.createElement("div", { "data-testid": "services-menu" }, serviceKeys.join(",")),
+}));
+vi.mock("./FavoritesBar", () => ({
+  default: () => React.createElement("div", { "data-testid": "favorites-bar" }),
+}));
+
 vi.mock("../hooks/useRecentlyVisited", () => ({
   useRecentlyVisited: { getState: () => recentState },
 }));
@@ -167,7 +176,7 @@ describe("AppLayoutShell — rendering", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getByText("Settings")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
   });
 });
 
@@ -201,7 +210,7 @@ describe("AppLayoutShell — health status", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getByText("Settings")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
   });
 
   it("shows partial count when not all healthy", () => {
@@ -252,7 +261,7 @@ describe("AppLayoutShell — navigation items", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getAllByPlaceholderText(/^Search services/).length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText(/^Search$/).length).toBeGreaterThan(0);
   });
 
   it("does not render Resources section when no health data", () => {
@@ -347,30 +356,39 @@ describe("AppLayoutShell — search", () => {
 });
 
 describe("AppLayoutShell — dark mode toggle", () => {
-  it("renders Dark mode toggle button", () => {
+  async function openSettingsMenu() {
+    const user = userEvent.setup();
     render(
       <AppLayoutShell>
         <div>Content</div>
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getAllByLabelText("Switch to dark mode").length).toBeGreaterThan(0);
+    await user.click(screen.getAllByRole("button", { name: "Settings" })[0]);
+    return user;
+  }
+
+  it("offers dark mode in the settings menu and toggles it", async () => {
+    const toggleDarkMode = vi.fn();
+    (useSettings as any).mockReturnValue({ darkMode: false, toggleDarkMode, refreshInterval: 5000, setRefreshInterval: vi.fn() });
+    const user = await openSettingsMenu();
+    await user.click(await screen.findByText("Switch to dark mode"));
+    expect(toggleDarkMode).toHaveBeenCalledTimes(1);
   });
 
-  it("renders Light toggle when darkMode is enabled", () => {
-    (useSettings as any).mockReturnValue({
-      darkMode: true,
-      toggleDarkMode: vi.fn(),
-      refreshInterval: 5000,
-      setRefreshInterval: vi.fn(),
-    });
-    render(
-      <AppLayoutShell>
-        <div>Content</div>
-      </AppLayoutShell>,
-      { wrapper: createWrapper() },
-    );
-    expect(screen.getAllByLabelText("Switch to light mode").length).toBeGreaterThan(0);
+  it("offers light mode when darkMode is enabled", async () => {
+    (useSettings as any).mockReturnValue({ darkMode: true, toggleDarkMode: vi.fn(), refreshInterval: 5000, setRefreshInterval: vi.fn() });
+    await openSettingsMenu();
+    expect(await screen.findByText("Switch to light mode")).toBeTruthy();
+  });
+
+  it("does not toggle the theme when the Settings item is chosen", async () => {
+    const toggleDarkMode = vi.fn();
+    (useSettings as any).mockReturnValue({ darkMode: false, toggleDarkMode, refreshInterval: 5000, setRefreshInterval: vi.fn() });
+    const user = await openSettingsMenu();
+    const items = await screen.findAllByText("Settings");
+    await user.click(items[items.length - 1]);
+    expect(toggleDarkMode).not.toHaveBeenCalled();
   });
 
   it("applies dark mode class to document body", () => {
@@ -538,28 +556,37 @@ describe("AppLayoutShell — notification bell", () => {
   });
 });
 
-describe("AppLayoutShell — mac shortcuts", () => {
-  it("shows ⌘K badge and Cmd+K placeholder on Mac", () => {
-    Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
+describe("AppLayoutShell — search hints", () => {
+  it("shows the [Alt+S] hint on the top-bar search, as in the AWS console", () => {
     render(
       <AppLayoutShell>
         <div>Content</div>
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getAllByText("⌘K").length).toBeGreaterThan(0);
-    expect(screen.getAllByPlaceholderText(/Cmd\+K/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("[Alt+S]").length).toBeGreaterThan(0);
   });
 
-  it("shows Ctrl+K badge on non-Mac", () => {
-    Object.defineProperty(navigator, "platform", { value: "Linux", configurable: true });
+  it("uses a plain placeholder on the navigation filter", () => {
     render(
       <AppLayoutShell>
         <div>Content</div>
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    expect(screen.getAllByText("Ctrl+K").length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText("Find services")).toBeTruthy();
+  });
+
+  it("navigates home from the navigation title", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    await user.click(screen.getByRole("link", { name: "Floci" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/");
   });
 });
 
@@ -572,7 +599,7 @@ describe("AppLayoutShell — keyboard shortcut", () => {
       { wrapper: createWrapper() },
     );
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
-    expect((document.activeElement as HTMLInputElement)?.getAttribute("placeholder")).toMatch(/Search services/);
+    expect((document.activeElement as HTMLInputElement)?.getAttribute("placeholder")).toMatch(/^Search$/);
   });
 
   it("focuses the global search input on Ctrl+K", () => {
@@ -583,7 +610,7 @@ describe("AppLayoutShell — keyboard shortcut", () => {
       { wrapper: createWrapper() },
     );
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }));
-    expect((document.activeElement as HTMLInputElement)?.getAttribute("placeholder")).toMatch(/Search services/);
+    expect((document.activeElement as HTMLInputElement)?.getAttribute("placeholder")).toMatch(/^Search$/);
   });
 });
 
@@ -791,7 +818,7 @@ describe("AppLayoutShell — navigation follow", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    await user.click(screen.getByText("Settings"));
+    await user.click(screen.getByRole("link", { name: "Settings" }));
     expect(mockNavigate).toHaveBeenCalledWith("/settings");
     expect(recentState.addVisited).not.toHaveBeenCalled();
   });
@@ -862,7 +889,7 @@ describe("AppLayoutShell — global search select", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "S3");
+    await user.type(screen.getAllByPlaceholderText(/^Search$/)[1], "S3");
     const options = await screen.findAllByRole("option", { name: /S3/ });
     const option = options.find((o) => !o.textContent?.includes("Search for"))!;
     await user.click(option);
@@ -884,7 +911,7 @@ describe("AppLayoutShell — global search select", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "Athena");
+    await user.type(screen.getAllByPlaceholderText(/^Search$/)[1], "Athena");
     const options = await screen.findAllByRole("option", { name: /Athena/ });
     const option = options.find((o) => !o.textContent?.includes("Search for"))!;
     await user.click(option);
@@ -905,7 +932,7 @@ describe("AppLayoutShell — global search select", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "efs");
+    await user.type(screen.getAllByPlaceholderText(/^Search$/)[1], "efs");
     const options = await screen.findAllByRole("option", { name: /efs/ });
     const option = options.find((o) => !o.textContent?.includes("Search for"))!;
     await user.click(option);
@@ -921,7 +948,7 @@ describe("AppLayoutShell — global search select", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "zzz");
+    await user.type(screen.getAllByPlaceholderText(/^Search$/)[1], "zzz");
     const option = await screen.findByRole("option", { name: /Search for "zzz"/i });
     await user.click(option);
     expect(mockNavigate).not.toHaveBeenCalled();
@@ -937,7 +964,7 @@ describe("AppLayoutShell — global search select", () => {
       </AppLayoutShell>,
       { wrapper: createWrapper() },
     );
-    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "zzz");
+    await user.type(screen.getAllByPlaceholderText(/^Search$/)[1], "zzz");
     const option = await screen.findByRole("option", { name: /Search for "zzz"/i });
     await user.click(option);
     expect(mockNavigate).not.toHaveBeenCalled();
@@ -968,9 +995,9 @@ describe("AppLayoutShell — search without health data", () => {
       { wrapper: createWrapper() },
     );
     // The search still renders with no options; typing produces no service match
-    await user.type(screen.getAllByPlaceholderText(/Search services/)[1], "s3");
+    await user.type(screen.getAllByPlaceholderText(/^Search$/)[1], "s3");
     expect(screen.getByRole("combobox")).toBeTruthy();
-    expect(screen.getAllByPlaceholderText(/Search services/).length).toBeGreaterThan(0);
+    expect(screen.getAllByPlaceholderText(/^Search$/).length).toBeGreaterThan(0);
   });
 });
 
@@ -988,5 +1015,161 @@ describe("AppLayoutShell — navigation toggle", () => {
     expect(toggle).toBeTruthy();
     await user.click(toggle);
     expect(screen.getByText("Dashboard")).toBeTruthy();
+  });
+});
+
+describe("AppLayoutShell — AWS console shell", () => {
+  it("renders the Services menu with Floci's services and the favorites bar", () => {
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getAllByTestId("services-menu")[0].textContent).toContain("s3");
+    expect(screen.getByTestId("favorites-bar")).toBeTruthy();
+  });
+
+  it("passes no services to the Services menu without health data", () => {
+    (useHealth as any).mockReturnValue({ data: undefined });
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(screen.getAllByTestId("services-menu")[0].textContent).toBe("");
+  });
+
+  it("focuses the global search input on Alt+S", () => {
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "S", altKey: true, bubbles: true }));
+    expect((document.activeElement as HTMLInputElement)?.getAttribute("placeholder")).toBe("Search");
+  });
+
+  it("ignores Alt with other keys", () => {
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    (document.activeElement as HTMLElement | null)?.blur();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "x", altKey: true, bubbles: true }));
+    expect((document.activeElement as HTMLInputElement)?.getAttribute?.("placeholder")).not.toBe("Search");
+  });
+
+  it("links Help to the README", () => {
+    render(
+      <AppLayoutShell>
+        <div>Content</div>
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const help = screen.getAllByRole("link", { name: /Help/ })[0];
+    expect(help.getAttribute("href")).toBe("https://github.com/ofsazib/floci-dash#readme");
+    expect(help.getAttribute("target")).toBe("_blank");
+  });
+
+  it("shows toasts as a full-width Flashbar in the notifications area", async () => {
+    const { ToastProvider, useToast } = await import("./Toast");
+    function Trigger() {
+      const { showToast } = useToast();
+      return <button onClick={() => showToast("success", "Saved it")}>trigger</button>;
+    }
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <AppLayoutShell>
+          <Trigger />
+        </AppLayoutShell>
+      </ToastProvider>,
+      { wrapper: createWrapper() },
+    );
+    await user.click(screen.getByText("trigger"));
+    expect(await screen.findByText("Saved it")).toBeTruthy();
+  });
+
+  it("renders page breadcrumbs and navigates on follow", async () => {
+    const { useBreadcrumbs } = await import("./ServiceNavigationContext");
+    const crumbs = [
+      { text: "Dashboard", href: "/#/" },
+      { text: "S3", href: "/#/services/s3" },
+    ];
+    function Page() {
+      useBreadcrumbs(crumbs);
+      return <div>page</div>;
+    }
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <Page />
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const nav = await screen.findByRole("navigation", { name: "Breadcrumbs" });
+    await user.click(within(nav).getAllByText("Dashboard")[0]);
+    expect(mockNavigate).toHaveBeenCalledWith("/");
+  });
+
+  it("follows in-page (#section) breadcrumbs through the service navigation", async () => {
+    const { useBreadcrumbs, useServiceNavigation } = await import("./ServiceNavigationContext");
+    const onFollow = vi.fn();
+    const nav = { header: { text: "EC2", href: "#dashboard" }, items: [], activeHref: "#instances", onFollow };
+    const crumbs = [
+      { text: "Dashboard", href: "/#/" },
+      { text: "EC2", href: "#dashboard" },
+      { text: "Instances", href: "#instances" },
+    ];
+    function Page() {
+      useServiceNavigation(nav);
+      useBreadcrumbs(crumbs);
+      return <div>page</div>;
+    }
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <Page />
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    const bc = await screen.findByRole("navigation", { name: "Breadcrumbs" });
+    await user.click(within(bc).getAllByText("EC2")[0]);
+    expect(onFollow).toHaveBeenCalledWith("#dashboard");
+    await user.click(within(bc).getAllByText("Dashboard")[0]);
+    expect(mockNavigate).toHaveBeenCalledWith("/");
+  });
+
+  it("replaces the global navigation with a registered service navigation", async () => {
+    const { useServiceNavigation } = await import("./ServiceNavigationContext");
+    const onFollow = vi.fn();
+    const nav = {
+      header: { text: "AWS Organizations", href: "#/services/organizations" },
+      items: [{ type: "link" as const, text: "Policies", href: "#policies" }],
+      activeHref: "#accounts",
+      onFollow,
+      footer: <div>Organization ID</div>,
+    };
+    function Page() {
+      useServiceNavigation(nav);
+      return <div>page</div>;
+    }
+    const user = userEvent.setup();
+    render(
+      <AppLayoutShell>
+        <Page />
+      </AppLayoutShell>,
+      { wrapper: createWrapper() },
+    );
+    expect(await screen.findByText("AWS Organizations")).toBeTruthy();
+    expect(screen.getByText("Organization ID")).toBeTruthy();
+    expect(screen.queryByText(/services running/)).toBeNull();
+    await user.click(screen.getByText("Policies"));
+    expect(onFollow).toHaveBeenCalledWith("#policies");
   });
 });

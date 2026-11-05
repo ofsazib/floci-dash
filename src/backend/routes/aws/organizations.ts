@@ -156,7 +156,8 @@ router.get("/children", async (c: Context) => {
   const parentId = c.req.query("parentId");
   if (!parentId) return c.json({ error: "parentId is required" }, 400);
   const client = getClient();
-  const result = await client.send(    new ListChildrenCommand({ ParentId: parentId, ChildType: "ACCOUNT" as any }));
+  const childType = c.req.query("childType") === "ORGANIZATIONAL_UNIT" ? "ORGANIZATIONAL_UNIT" : "ACCOUNT";
+  const result = await client.send(new ListChildrenCommand({ ParentId: parentId, ChildType: childType }));
   return c.json({ children: result.Children || [] });
 });
 
@@ -172,15 +173,17 @@ router.get("/accounts", async (c: Context) => {
 });
 
 router.post("/accounts", async (c: Context) => {
-  const body = await c.req.json<{ email: string; name?: string; iamUserAccessToBilling?: string; parentId?: string; roleName?: string }>();
+  // Accounts are always created in the root (as in AWS); move them to an OU afterwards.
+  const body = await c.req.json<{ email: string; name?: string; iamUserAccessToBilling?: string; roleName?: string; tags?: Record<string, string> }>();
   if (!body.email) return c.json({ error: "email is required" }, 400);
   const client = getClient();
+  const tags = Object.entries(body.tags || {});
   const result = await client.send(
     new CreateAccountCommand({
       Email: body.email,
       AccountName: body.name,
       IamUserAccessToBilling: body.iamUserAccessToBilling as any,
-      Tags: body.parentId ? [{ Key: "ParentId", Value: body.parentId }] : undefined,
+      Tags: tags.length ? tags.map(([Key, Value]) => ({ Key, Value })) : undefined,
       RoleName: body.roleName,
     } as any)
   );

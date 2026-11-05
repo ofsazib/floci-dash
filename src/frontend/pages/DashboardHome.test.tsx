@@ -77,17 +77,16 @@ describe("DashboardHome", () => {
 
   it("renders dashboard with health data", () => {
     render(<DashboardHome />, { wrapper: createWrapper() });
-    expect(screen.getByText("Floci Dash")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Console Home" })).toBeTruthy();
     expect(screen.getByText("Connected — v1.5.22")).toBeTruthy();
     expect(screen.getByText("50")).toBeTruthy();
     expect(screen.getByText("30")).toBeTruthy();
     expect(screen.getByText("Resources")).toBeTruthy();
-    expect(screen.getByText("11")).toBeTruthy();
+    expect(screen.getByText("(11)")).toBeTruthy();
   });
 
   it("shows resource counts section with non-zero services", () => {
     render(<DashboardHome />, { wrapper: createWrapper() });
-    expect(screen.getByText("Resource Counts")).toBeTruthy();
     expect(screen.getAllByText("S3").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("DYNAMODB")).toBeTruthy();
     expect(screen.getByText("SQS")).toBeTruthy();
@@ -106,7 +105,8 @@ describe("DashboardHome", () => {
   it("does not show resource counts section when all counts are zero", () => {
     mockResourceCounts.mockReturnValue({ data: {} });
     render(<DashboardHome />, { wrapper: createWrapper() });
-    expect(screen.queryByText("Resource Counts")).toBeNull();
+    expect(screen.getByText("No resources yet.")).toBeTruthy();
+    expect(screen.queryByText("DYNAMODB")).toBeNull();
   });
 
   it("navigates to S3 and records activity when 'Open S3' button is clicked", async () => {
@@ -170,9 +170,9 @@ describe("DashboardHome", () => {
   it("shows dash for resources when resourceCounts is undefined", () => {
     mockResourceCounts.mockReturnValue({ data: undefined });
     render(<DashboardHome />, { wrapper: createWrapper() });
-    // The Resources StatCard shows "\u2014" when resourceCounts is falsy
-    const dashes = screen.getAllByText("\u2014");
-    expect(dashes.length).toBeGreaterThanOrEqual(1);
+    // The Resources widget counter shows "(\u2014)" when resourceCounts is falsy
+    expect(screen.getByText("(\u2014)")).toBeTruthy();
+    expect(screen.getByText("No resources yet.")).toBeTruthy();
   });
 
   it("shows 'All running' when no inactive services", () => {
@@ -194,10 +194,16 @@ describe("DashboardHome", () => {
     expect(screen.getByText("30 of 50 services enabled")).toBeTruthy();
   });
 
-  it("renders BreadcrumbGroup", () => {
+  it("lays out Console Home widgets with links to Settings", async () => {
+    const user = userEvent.setup();
     render(<DashboardHome />, { wrapper: createWrapper() });
-    const dashes = screen.getAllByText("Dashboard");
-    expect(dashes.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("heading", { name: "Welcome to Floci" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /Floci Health/ })).toBeTruthy();
+    await user.click(screen.getByText("Go to Settings"));
+    expect(mockNavigate).toHaveBeenCalledWith("/settings");
+    mockNavigate.mockClear();
+    await user.click(screen.getByRole("link", { name: "Settings" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/settings");
   });
 
   it("shows resource counts sorted desc and sliced to max 10", () => {

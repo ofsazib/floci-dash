@@ -283,3 +283,550 @@
 }
 
 
+
+/* ── AWS console shell (colors sampled from AWS console screenshots) ── */
+.fd-topnav-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fd-services-menu {
+  position: relative;
+}
+
+.fd-services-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fd-services-button:hover,
+.fd-services-button--open {
+  color: #ff9900;
+}
+
+.fd-services-button:focus-visible {
+  outline: 2px solid #ff9900;
+}
+
+.fd-services-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 3000;
+  display: flex;
+  width: min(880px, 90vw);
+  max-height: 70vh;
+  background: #ffffff;
+  color: #10141a;
+  border: 1px solid #ebebf0;
+  box-shadow: 0 4px 20px 1px rgba(0, 28, 36, 0.3);
+}
+
+.fd-services-groups {
+  flex: 0 0 220px;
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+  overflow-y: auto;
+  border-right: 1px solid #ebebf0;
+}
+
+.fd-services-group {
+  display: block;
+  width: 100%;
+  padding: 6px 20px;
+  border: 0;
+  background: none;
+  color: #10141a;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fd-services-group:hover {
+  background: #f6f6f9;
+}
+
+.fd-services-group--active {
+  color: #376ede;
+  font-weight: 700;
+}
+
+.fd-services-list {
+  flex: 1;
+  padding: 12px 20px;
+  overflow-y: auto;
+}
+
+.fd-services-heading {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.fd-services-empty {
+  color: #656871;
+}
+
+.fd-services-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fd-services-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fd-services-star {
+  border: 0;
+  background: none;
+  color: #656871;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.fd-services-star[aria-pressed="true"] {
+  color: #376ede;
+}
+
+.fd-services-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  color: #376ede;
+  text-decoration: none;
+}
+
+.fd-services-link:hover {
+  text-decoration: underline;
+}
+
+.fd-favorites-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 34px;
+  padding: 0 20px;
+  overflow-x: auto;
+  background: #171d24;
+  border-top: 1px solid #10141a;
+}
+
+.fd-favorites-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.fd-favorites-item:hover {
+  color: #ff9900;
+}
+
+.fd-favorites-empty {
+  color: #95a5a6;
+  font-size: 13px;
+}
+
+.fd-service-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  color: #ffffff;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.fd-nav-footer {
+  padding: 16px 28px;
+  border-top: 1px solid #ebebf0;
+  color: #888d93;
+}
+
+/* Same font stack as the Cloudscape theme, for plain elements outside components. */
+body {
+  font-family: "Amazon Ember", "Helvetica Neue", Roboto, Arial, sans-serif;
+}
+
+/* Side navigation header + tools, AWS console style */
+.fd-nav-header {
+  padding: 20px 28px 16px;
+  border-bottom: 1px solid #ebebf0;
+}
+
+.fd-nav-header-title {
+  color: #10141a;
+  font-size: 18px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.awsui-dark-mode .fd-nav-header-title {
+  color: #d1d5db;
+}
+
+.fd-nav-tools {
+  padding: 12px 20px 4px;
+}
+
+.fd-nav-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  color: #656871;
+  font-size: 12px;
+}
+
+.fd-nav-status .fd-dot-success,
+.fd-nav-status .fd-dot-warning {
+  margin-right: 6px;
+}
+
+/* Cloudscape shrinks the top-bar title even when there is room; keep "Floci Dash" whole. */
+#header [class^="awsui_title_"] {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.fd-nav-status {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.fd-nav-status .fd-dot-success,
+.fd-nav-status .fd-dot-warning {
+  display: inline-block;
+}
+
+.fd-nav-status > :last-child {
+  flex-shrink: 0;
+}
+
+/* ── AWS Organizations (layout from AWS console screenshots) ── */
+.fd-org-hero {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 40px 48px;
+  background: #171d24;
+  color: #ffffff;
+}
+
+.fd-org-hero-text {
+  flex: 1 1 420px;
+  max-width: 720px;
+}
+
+.fd-org-hero-text h1 {
+  margin: 4px 0;
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.fd-org-hero-category {
+  font-size: 14px;
+  color: #d5dbdb;
+}
+
+.fd-org-hero-tagline {
+  margin: 0 0 16px;
+  font-size: 32px;
+  font-weight: 300;
+  line-height: 1.2;
+}
+
+.fd-org-hero-box {
+  display: flex;
+  flex: 0 1 380px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: #ffffff;
+  color: #10141a;
+}
+
+.fd-org-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 0 20px 16px;
+}
+
+.fd-org-search {
+  flex: 1 1 360px;
+}
+
+.fd-org-tree {
+  border-top: 1px solid #ebebf0;
+}
+
+.fd-org-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  align-items: center;
+  border-bottom: 1px solid #ebebf0;
+}
+
+.fd-org-row--head {
+  background: #ffffff;
+  color: #434650;
+  font-weight: 700;
+}
+
+.fd-org-row--head .fd-org-cell,
+.fd-org-row--head .fd-org-date {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.fd-org-cell {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.fd-org-date {
+  padding: 0 20px;
+  border-left: 1px solid #ebebf0;
+}
+
+.fd-org-expander {
+  display: inline-flex;
+  flex: none;
+  width: 18px;
+}
+
+.fd-org-expander button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #434650;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.fd-org-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: #434650;
+}
+
+.fd-org-text {
+  min-width: 0;
+}
+
+.fd-org-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.fd-org-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #376ede;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fd-org-name:hover {
+  text-decoration: underline;
+}
+
+.fd-org-subtitle {
+  color: #656871;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.fd-org-badge {
+  padding: 2px 10px;
+  border-radius: 16px;
+  background: #434650;
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.fd-org-badge--muted {
+  background: #d5dbdb;
+  color: #10141a;
+}
+
+.fd-org-empty {
+  color: #656871;
+  font-weight: 400;
+}
+
+.fd-org-tree--picker {
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid #ebebf0;
+}
+
+.fd-org-tree--picker .fd-org-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.fd-org-tree--picker .fd-org-date {
+  display: none;
+}
+
+.awsui-dark-mode .fd-org-row,
+.awsui-dark-mode .fd-org-tree,
+.awsui-dark-mode .fd-org-date {
+  border-color: #414d5c;
+}
+
+.awsui-dark-mode .fd-org-row--head {
+  background: #1a2433;
+  color: #d1d5db;
+}
+
+.awsui-dark-mode .fd-org-name {
+  color: #539fe5;
+}
+
+.fd-org-row--head .fd-org-cell {
+  padding-left: 20px;
+}
+
+/* ── Console detail pages (EC2, ECS) ── */
+.fd-console-break {
+  word-break: break-all;
+}
+
+/* ── Console footer (dark bar at the bottom, as in the AWS console) ── */
+.fd-console-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 36px;
+  padding: 0 20px;
+  background: #171d24;
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.fd-console-footer a {
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.fd-console-footer a:hover {
+  color: #ff9900;
+}
+
+.fd-console-footer-right {
+  display: flex;
+  gap: 24px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Top bar: search sits left, right after the services grid button (as in the console),
+   instead of Cloudscape's centered 340px search slot. */
+#header [class*="awsui_inputs_"] {
+  justify-content: flex-start;
+  padding-inline-start: 4px;
+}
+
+#header [class*="awsui_search_"]:not([class*="search-expanded"]) {
+  max-inline-size: 760px;
+}
+
+/* Identity: only as wide as the logo, so the services button and search follow it directly. */
+#header [class*="awsui_identity_"] {
+  flex: 0 0 auto;
+}
+
+#header [class*="awsui_logo_"] {
+  block-size: 24px;
+  min-inline-size: 40px;
+}
+
+/* Keep the console top bar on screen while the page scrolls; the app layout's
+   toolbar (headerSelector="#header") sticks right under it. */
+#header {
+  position: sticky;
+  top: 0;
+  z-index: 1002;
+}
+
+/* ── Console Home widgets ── */
+.fd-widget-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.fd-widget-handle {
+  padding-top: 4px;
+  color: var(--color-text-body-secondary, #434650);
+  font-size: 18px;
+  line-height: 1;
+  cursor: grab;
+}
+
+.fd-widget-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.fd-widget-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border-divider-default, #c6c6cd);
+}
+
+.fd-widget-stat-value {
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1.2;
+}

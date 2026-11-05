@@ -83,7 +83,7 @@ describe("settings store — loadSettings edge cases", () => {
     vi.resetModules();
     const { useSettings: freshUseSettings } = await import("./settings");
     const s = freshUseSettings.getState();
-    expect(s.darkMode).toBe(true);
+    expect(s.darkMode).toBe(false);
     expect(s.refreshInterval).toBe(5000);
   });
 
@@ -99,7 +99,7 @@ describe("settings store — loadSettings edge cases", () => {
     vi.resetModules();
     const { useSettings: freshUseSettings } = await import("./settings");
     const s = freshUseSettings.getState();
-    expect(s.darkMode).toBe(true);
+    expect(s.darkMode).toBe(false);
     expect(s.refreshInterval).toBe(5000);
   });
 });

@@ -15,6 +15,8 @@ export default defineConfig({
     // CI runners have ≤4 vCPUs, so this does not slow CI.
     maxWorkers: 4,
     setupFiles: ["./src/test/setup.ts"],
+    // Ignore a developer's local rebranding (.env.local VITE_BRAND_*) so tests are deterministic.
+    env: { VITE_BRAND_NAME: "", VITE_BRAND_LOGO: "" },
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "lcov"],

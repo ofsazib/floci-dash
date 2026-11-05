@@ -32,6 +32,8 @@ import {
   useOrgOU,
   useOrgParents,
   useOrgChildren,
+  useEnableOrgPolicyType,
+  useDisableOrgPolicyType,
   useOrgAccount,
   useOrgPolicy,
 } from "./useOrganizations";
@@ -48,7 +50,7 @@ describe("Organizations query hooks", () => {
     mockApi.mockResolvedValueOnce({ organization: { Id: "o-1" } });
     const { result } = renderHook(() => useOrg(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/organizations/");
+    expect(mockApi).toHaveBeenCalledWith("/aws/organizations");
   });
 
   it("useOrgRoots calls correct URL", async () => {
@@ -202,6 +204,33 @@ describe("Organizations mutation hooks", () => {
     expect(mockApi).toHaveBeenCalledWith("/aws/organizations/policies/p-1", { method: "DELETE" });
   });
 
+  it("useOrgChildren can list OU children", async () => {
+    mockApi.mockResolvedValueOnce({ children: [] });
+    const { result } = renderHook(() => useOrgChildren("r-1", "ORGANIZATIONAL_UNIT"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockApi).toHaveBeenCalledWith("/aws/organizations/children?parentId=r-1&childType=ORGANIZATIONAL_UNIT");
+  });
+
+  it("useEnableOrgPolicyType posts the type and root", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useEnableOrgPolicyType(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ policyType: "TAG_POLICY", rootId: "r-1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/organizations/policies/enable-type", {
+      method: "POST",
+      body: JSON.stringify({ policyType: "TAG_POLICY", rootId: "r-1" }),
+    });
+  });
+
+  it("useDisableOrgPolicyType posts the type and root", async () => {
+    mockApi.mockResolvedValueOnce({});
+    const { result } = renderHook(() => useDisableOrgPolicyType(), { wrapper: createWrapper() });
+    await result.current.mutateAsync({ policyType: "TAG_POLICY", rootId: "r-1" });
+    expect(mockApi).toHaveBeenCalledWith("/aws/organizations/policies/disable-type", {
+      method: "POST",
+      body: JSON.stringify({ policyType: "TAG_POLICY", rootId: "r-1" }),
+    });
+  });
+
   it("useAttachOrgPolicy calls correct URL", async () => {
     mockApi.mockResolvedValueOnce({});
     const { result } = renderHook(() => useAttachOrgPolicy(), { wrapper: createWrapper() });
@@ -324,7 +353,7 @@ describe("Organizations mutation hooks", () => {
     mockApi.mockResolvedValueOnce({ children: [] });
     const { result } = renderHook(() => useOrgChildren("parent-1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockApi).toHaveBeenCalledWith("/aws/organizations/children?parentId=parent-1");
+    expect(mockApi).toHaveBeenCalledWith("/aws/organizations/children?parentId=parent-1&childType=ACCOUNT");
   });
 
   it("useOrgChildren disabled when null", () => {
