@@ -32,6 +32,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Start Floci (DinD with docker socket)
+        run: |
+          docker run -d --name floci-ci --privileged             -p 9878:4566             -v /var/run/docker.sock:/var/run/docker.sock             -e FLOCI_SERVICES=s3,dynamodb,sqs,sns,lambda,iam,ec2,rds,secretsmanager,eventbridge,cloudwatch,logs             floci/floci@sha256:5ee85db604c4aa74ac76e07ea5cc83086f37bb472bf3dbb97e34019e48efae9c
+
+      - name: Wait for Floci
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:9878/_floci/health > /dev/null; then
+              echo "Floci ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Floci did not become ready"
+          docker logs floci-ci | tail -50
+          exit 1
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
 
@@ -72,18 +89,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    services:
-      floci:
-        image: floci/floci@sha256:5ee85db604c4aa74ac76e07ea5cc83086f37bb472bf3dbb97e34019e48efae9c # 2.2.0 — tested; 2.4.0 regressed IAM/RedshiftData/VP (create→read 500s)
-        ports:
-          - 9878:4566
-        env:
-          FLOCI_SERVICES: s3,dynamodb,sqs,sns,lambda,iam,ec2,rds,secretsmanager,eventbridge,cloudwatch,logs
-        options: >-
-          --health-cmd "true"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 30
 
     steps:
       - name: Checkout
