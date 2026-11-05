@@ -41,18 +41,6 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Wait for Floci
-        run: |
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:9878/_floci/health > /dev/null; then
-              echo "Floci ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Floci did not become ready"
-          exit 1
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
