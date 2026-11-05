@@ -45,6 +45,30 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT SIGQUIT
 
+# ── Clean stale Docker/containerd runtime state ─────────────────────────
+# After `docker stop`, the container's PID-1 is SIGKILLed before dockerd and
+# its containerd children can finish shutting down, leaving stale pidfiles and
+# orphaned containerd processes behind (issue #11). Remove the pidfiles and
+# kill leftovers so dockerd can start again on `docker start`.
+log_info "Cleaning stale Docker/containerd runtime state..."
+rm -f /var/run/docker.pid /var/run/docker.sock 2>/dev/null || true
+for pidfile in /var/run/docker/containerd/containerd.pid /run/containerd/containerd.pid; do
+    [ -f "$pidfile" ] || continue
+    pid=$(cat "$pidfile" 2>/dev/null || true)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        log_warn "Stopping leftover containerd (PID $pid)"
+        kill -TERM "$pid" 2>/dev/null || true
+        for i in $(seq 1 20); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.5
+        done
+        kill -KILL "$pid" 2>/dev/null || true
+    fi
+    rm -f "$pidfile" 2>/dev/null || true
+done
+pkill -9 -x containerd 2>/dev/null || true
+rm -f /run/docker/containerd/containerd.pid 2>/dev/null || true
+
 # ── Start Docker daemon ──────────────────────────────────────────────────
 log_info "Starting Docker daemon..."
 dockerd \
