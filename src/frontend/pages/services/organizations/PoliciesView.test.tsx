@@ -166,3 +166,21 @@ describe("PolicyTypeView", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+describe("PoliciesView — create dialog dismiss", () => {
+  it("closes the create-policy dialog via Cancel (onDismiss arm)", () => {
+    render(<PolicyTypeView root={root} type="TAG_POLICY" />);
+    fireEvent.click(screen.getByRole("button", { name: "Create policy" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Create new tag policy" })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("closes the create-policy dialog via the X/onDismiss button", () => {
+    render(<PolicyTypeView root={root} type="TAG_POLICY" />);
+    fireEvent.click(screen.getByRole("button", { name: "Create policy" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Dismiss modal" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});

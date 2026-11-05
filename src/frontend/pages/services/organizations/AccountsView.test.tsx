@@ -333,3 +333,19 @@ describe("AccountsView — accounts", () => {
     await waitFor(() => expect(m.toast).toHaveBeenCalledWith("error", "Failed to close account"));
   });
 });
+
+describe("AccountsView — modal dismiss arms", () => {
+  const dismiss = (actionName: string, via: "Cancel" | "Dismiss modal" = "Cancel") => {
+    view();
+    check("dev-acct");
+    fireEvent.click(action(actionName));
+    fireEvent.click(within(dialog()).getByRole("button", { name: via }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  };
+
+  it("dismisses the move dialog via Cancel", () => dismiss("Move"));
+  it("dismisses the remove-account dialog via Cancel", () => dismiss("Remove from organization"));
+  it("dismisses the close-account dialog via Cancel", () => dismiss("Close account"));
+  it("dismisses the move dialog via the X/onDismiss button", () => dismiss("Move", "Dismiss modal"));
+  it("dismisses the close-account dialog via the X/onDismiss button", () => dismiss("Close account", "Dismiss modal"));
+});
