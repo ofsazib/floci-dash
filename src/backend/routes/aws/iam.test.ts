@@ -235,12 +235,12 @@ describe("IAM Routes", () => {
       expect(mockSend.mock.calls[0][0].UserName).toBe("new-user");
     });
 
-    it("POST /users — default empty path when path omitted", async () => {
+    it("POST /users — defaults path to / when omitted (strict-mode validation)", async () => {
       mockSend.mockResolvedValueOnce({});
       const res = await post("/users", { name: "no-path-user" });
       expect(res.status).toBe(200);
       expect(mockSend.mock.calls[0][0].UserName).toBe("no-path-user");
-      expect(mockSend.mock.calls[0][0].Path).toBe("");
+      expect(mockSend.mock.calls[0][0].Path).toBe("/");
     });
 
     it("POST /users — 400 when name is missing", async () => {
