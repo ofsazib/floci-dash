@@ -41,6 +41,18 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Wait for Floci
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:9878/_floci/health > /dev/null; then
+              echo "Floci ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Floci did not become ready"
+          exit 1
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -80,7 +92,7 @@ jobs:
         env:
           FLOCI_SERVICES: s3,dynamodb,sqs,sns,lambda,iam,ec2,rds,secretsmanager,eventbridge,cloudwatch,logs
         options: >-
-          --health-cmd 'for p in /proc/[0-9]*/cmdline; do case `head -c 60 "$p" 2>/dev/null` in *application*) exit 0;; esac; done; exit 1'
+          --health-cmd "true" # container liveness is polled by the wait-for-floci step below
           --health-interval 5s
           --health-timeout 5s
           --health-retries 30
