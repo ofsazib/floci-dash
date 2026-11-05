@@ -13,7 +13,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
-RUN pnpm run build
+RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
 
 # Stage 2 — Runtime with Docker-in-Docker
 FROM debian:bookworm-slim
@@ -53,9 +53,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Floci binary and gosu
+# Copy Floci binary
 COPY --from=floci/floci:latest /app/application /app/application
-COPY --from=floci/floci:latest /usr/local/bin/gosu /usr/local/bin/gosu
+
+# Install gosu — the floci 2.2.0+ images (RHEL-based) no longer ship it
+RUN arch=$(dpkg --print-architecture) \
+    && curl -fsSL "https://github.com/tianon/gosu/releases/download/1.17/gosu-${arch}" -o /usr/local/bin/gosu \
+    && chmod 0755 /usr/local/bin/gosu
 
 # Create floci user
 RUN groupadd -g 1001 floci && \
