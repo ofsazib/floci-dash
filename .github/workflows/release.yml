@@ -74,7 +74,7 @@ jobs:
 
     services:
       floci:
-        image: floci/floci:latest
+        image: floci/floci@sha256:5ee85db604c4aa74ac76e07ea5cc83086f37bb472bf3dbb97e34019e48efae9c # 2.2.0 — tested; 2.4.0 regressed IAM/RedshiftData/VP (create→read 500s)
         ports:
           - 9878:4566
         env:
