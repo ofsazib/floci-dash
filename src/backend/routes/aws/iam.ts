@@ -253,7 +253,7 @@ router.post("/users", async (c: Context) => {
   const body = await c.req.json<any>();
   const username = sanitizeName(body.name || "", 128);
   if (!username) return c.json({ error: "name is required" }, 400);
-  await iam().send(new CreateUserCommand({ UserName: username, Path: sanitizeName(body.path || "", 512) }));
+  await iam().send(new CreateUserCommand({ UserName: username, Path: sanitizeName(body.path || "/", 512) }));
   return c.json({ name: username, created: true });
 });
 
@@ -341,7 +341,7 @@ router.post("/roles", async (c: Context) => {
       AssumeRolePolicyDocument: trustDoc,
       Description: sanitizeName(body.description || "", 1000),
       MaxSessionDuration: body.maxSessionDuration,
-      Path: sanitizeName(body.path || "", 512),
+      Path: sanitizeName(body.path || "/", 512),
     })
   );
   return c.json({ name: roleName, created: true });
@@ -365,7 +365,7 @@ router.post("/groups", async (c: Context) => {  const body = await c.req.json<an
   const groupName = sanitizeName(body.name || "", 128);
   if (!groupName) return c.json({ error: "name is required" }, 400);
   await iam().send(
-    new CreateGroupCommand({ GroupName: groupName, Path: sanitizeName(body.path || "", 512) })
+    new CreateGroupCommand({ GroupName: groupName, Path: sanitizeName(body.path || "/", 512) })
   );
   return c.json({ name: groupName, created: true });
 });
@@ -510,7 +510,7 @@ router.post("/policies", async (c: Context) => {
       PolicyName: policyName,
       PolicyDocument: policyDoc,
       Description: sanitizeName(body.description || "", 1000),
-      Path: sanitizeName(body.path || "", 512),
+      Path: sanitizeName(body.path || "/", 512),
     })
   );
   return c.json({ name: result.Policy?.PolicyName, arn: result.Policy?.Arn, created: true });
@@ -566,7 +566,7 @@ router.get("/instance-profiles", async (c: Context) => {
 router.post("/instance-profiles", async (c: Context) => {
   const body = await c.req.json<any>();
   await iam().send(
-    new CreateInstanceProfileCommand({ InstanceProfileName: body.name, Path: body.path })
+    new CreateInstanceProfileCommand({ InstanceProfileName: body.name, Path: sanitizeName(body.path || "/", 512) })
   );
   return c.json({ name: body.name, created: true });
 });

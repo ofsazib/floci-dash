@@ -3965,6 +3965,17 @@ describe("Redshift Data Integration", () => {
     clusterCreated = true;
   }
 
+  /** Poll a statement until it leaves STARTED/SUBMITTED (strict/slow CI mode). */
+  async function pollStatement(id: string): Promise<{ status: number; data: any }> {
+    let last = await api("GET", `/api/aws/redshiftdata/statements/${encodeURIComponent(id)}`);
+    for (let i = 0; i < 45; i++) {
+      if (!["STARTED", "SUBMITTED", "PICKED"].includes(last.data.status)) return last;
+      await new Promise((r) => setTimeout(r, 2000));
+      last = await api("GET", `/api/aws/redshiftdata/statements/${encodeURIComponent(id)}`);
+    }
+    return last;
+  }
+
   it("executes a SELECT and fetches the result", { timeout: 90000 }, async () => {
     await ensureCluster();
     const run = await api("POST", "/api/aws/redshiftdata/query", {
@@ -3977,7 +3988,7 @@ describe("Redshift Data Integration", () => {
     const id = run.data.id;
     expect(id).toBeTruthy();
 
-    const desc = await api("GET", `/api/aws/redshiftdata/statements/${encodeURIComponent(id)}`);
+    const desc = await pollStatement(id);
     expect(desc.status).toBe(200);
     expect(desc.data.status).toBe("FINISHED");
     expect(desc.data.hasResultSet).toBe(true);
@@ -4003,7 +4014,7 @@ describe("Redshift Data Integration", () => {
     expect(ddl.status).toBe(201);
     expect(ddl.data.hasResultSet).toBe(false);
 
-    const desc = await api("GET", `/api/aws/redshiftdata/statements/${encodeURIComponent(ddl.data.id)}`);
+    const desc = await pollStatement(ddl.data.id);
     expect(desc.data.status).toBe("FINISHED");
 
     const tables = await api(
@@ -4024,10 +4035,7 @@ describe("Redshift Data Integration", () => {
       sql: "SELECT * FROM does_not_exist",
     });
     expect(run.status).toBe(201);
-    const desc = await api(
-      "GET",
-      `/api/aws/redshiftdata/statements/${encodeURIComponent(run.data.id)}`
-    );
+    const desc = await pollStatement(run.data.id);
     expect(desc.data.status).toBe("FAILED");
     expect(desc.data.error).toBeTruthy();
   });
@@ -4826,11 +4834,23 @@ describe("DMS Integration", () => {
       credentials: { accessKeyId: "test", secretAccessKey: "test" },
     });
     const subnets = await ec2.send(new DescribeSubnetsCommand({}));
-    const byAz = new Map();
+    // Strict-mode Floci requires all subnets of a replication group to share one VPC
+    const byVpc = new Map<string, { id: string; az: string }[]>();
     for (const s of subnets.Subnets || []) {
-      if (!byAz.has(s.AvailabilityZone)) byAz.set(s.AvailabilityZone, s.SubnetId);
+      const vpc = s.VpcId || "default";
+      if (!byVpc.has(vpc)) byVpc.set(vpc, []);
+      byVpc.get(vpc)!.push({ id: s.SubnetId as string, az: s.AvailabilityZone as string });
     }
-    realSubnetIds = [...byAz.values()].slice(0, 2);
+    // Prefer the VPC with the most distinct AZs (>= 2 required by DMS)
+    let best: { id: string; az: string }[] = [];
+    for (const list of byVpc.values()) {
+      const azs = new Set(list.map((x) => x.az));
+      if (list.length >= 2 && azs.size >= (best.length ? new Set(best.map((x) => x.az)).size : 0) && list.length > best.length) {
+        best = list;
+      }
+    }
+    if (!best.length) best = [...byVpc.values()][0] || [];
+    realSubnetIds = best.slice(0, 2).map((x) => x.id);
   });
 
   itWhenAvailable("creates a replication subnet group", async () => {
