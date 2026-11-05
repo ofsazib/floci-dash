@@ -92,7 +92,7 @@ jobs:
         env:
           FLOCI_SERVICES: s3,dynamodb,sqs,sns,lambda,iam,ec2,rds,secretsmanager,eventbridge,cloudwatch,logs
         options: >-
-          --health-cmd "true" # container liveness is polled by the wait-for-floci step below
+          --health-cmd "true"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 30
